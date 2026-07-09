@@ -864,7 +864,7 @@ export default function Calibre() {
 
         /* reserve */
         .gauge-wrap{display:flex;justify-content:center;margin:6px 0 8px;}
-        .weekbars{display:flex;gap:10px;justify-content:center;margin-top:26px;height:96px;}
+        .weekbars{display:flex;gap:10px;width:fit-content;margin:26px auto 0;height:96px;}
         .wb{width:26px;height:96px;background:rgba(86,225,232,0.12);border-radius:4px;display:flex;
           align-items:flex-end;position:relative;}
         .wbf{width:100%;background:var(--brass);border-radius:4px;}
