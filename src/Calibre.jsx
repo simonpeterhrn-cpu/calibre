@@ -131,6 +131,55 @@ function fmtDelta(min) {
   return `${txt} ${min > 0 ? "later" : "earlier"} than target`;
 }
 
+/* Minutes-from-noon representation of a "HH:MM" clock time. Bedtimes
+   cluster in the evening, far from the noon reference point, so
+   averaging/variance on this scale doesn't get distorted by the
+   midnight wraparound the way raw minutes-since-midnight would. */
+function minutesFromNoon(hhmm) {
+  if (!hhmm) return null;
+  const [h, m] = hhmm.split(":").map(Number);
+  let v = h * 60 + m - 12 * 60;
+  if (v < 0) v += 24 * 60;
+  return v;
+}
+function stdDev(arr) {
+  if (arr.length < 2) return 0;
+  const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+  const variance = arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length;
+  return Math.sqrt(variance);
+}
+/* 0-120min stddev in bedtime maps linearly to a 100-0 consistency score */
+function consistencyBand(score) {
+  if (score == null) return { label: "Not enough data", color: "var(--slate)" };
+  if (score >= 80) return { label: "Very consistent", color: "var(--jade)" };
+  if (score >= 60) return { label: "Fairly consistent", color: "var(--jade)" };
+  if (score >= 40) return { label: "Irregular", color: "var(--brass)" };
+  return { label: "Very irregular", color: "var(--crimson)" };
+}
+function pearson(xs, ys) {
+  const n = xs.length;
+  if (n < 2) return null;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0, dx2 = 0, dy2 = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - mx, dy = ys[i] - my;
+    num += dx * dy; dx2 += dx * dx; dy2 += dy * dy;
+  }
+  const denom = Math.sqrt(dx2 * dy2);
+  return denom === 0 ? 0 : num / denom;
+}
+function corrLabel(r) {
+  if (r == null) return "Log a few more nights to see this.";
+  const abs = Math.abs(r);
+  if (abs < 0.15) return `No clear relationship yet (r = ${r.toFixed(2)}).`;
+  const strength = abs >= 0.6 ? "Strong" : abs >= 0.35 ? "Moderate" : "Weak";
+  const dir = r > 0
+    ? "more sleep tends to line up with more focus time the next day"
+    : "more sleep tends to line up with less focus time the next day";
+  return `${strength} ${r > 0 ? "positive" : "negative"} link (r = ${r.toFixed(2)}) — ${dir}.`;
+}
+
 /* Current streak from history. If today is unchecked the chain isn't
    broken yet — count from yesterday. */
 function calcStreak(history) {
@@ -393,14 +442,34 @@ function Dial({ mode, secondsLeft, total, running, onToggle, onReset, onSkip }) 
 }
 
 /* ================= sparkline ================= */
-function Spark({ points, color = "var(--brass)", max, height = 40, width = 200 }) {
+function Spark({ points, color = "var(--brass)", max, height = 40, width = 200, responsive = false }) {
   if (!points.length) return null;
   const hi = max || Math.max(...points, 1);
   const step = width / Math.max(points.length - 1, 1);
   const d = points.map((p, i) => `${i === 0 ? "M" : "L"} ${(i * step).toFixed(1)} ${(height - (p / hi) * height).toFixed(1)}`).join(" ");
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} preserveAspectRatio="none" aria-hidden="true">
+    <svg viewBox={`0 0 ${width} ${height}`} width={responsive ? "100%" : width} height={height} preserveAspectRatio="none" aria-hidden="true"
+      style={responsive ? { display: "block" } : undefined}>
       <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* ================= scatter (sleep vs next-day focus) ================= */
+function Scatter({ points, width = 300, height = 170, color = "var(--brass)" }) {
+  if (!points.length) return null;
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  const xMax = Math.max(...xs, 1), yMax = Math.max(...ys, 1);
+  const pad = 8;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true">
+      <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="var(--steel)" strokeWidth="1" />
+      <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="var(--steel)" strokeWidth="1" />
+      {points.map(([x, y], i) => {
+        const px = pad + (x / xMax) * (width - pad * 2);
+        const py = height - pad - (y / yMax) * (height - pad * 2);
+        return <circle key={i} cx={px} cy={py} r="4" fill={color} opacity="0.7" />;
+      })}
     </svg>
   );
 }
@@ -409,6 +478,7 @@ function Spark({ points, color = "var(--brass)", max, height = 40, width = 200 }
 export default function Calibre() {
   const { data, save, session, syncState } = useStore();
   const [tab, setTab] = useState("today");
+  const [insightRange, setInsightRange] = useState(7);
 
   /* ---------------- timer: timestamp-based, throttle-proof --------------- */
   const [timer, setTimer] = useState(loadTimer);
@@ -718,6 +788,46 @@ export default function Calibre() {
     const projectRows = Object.entries(byProject).sort((a, b) => b[1] - a[1]);
     return { last7, todayMins, avgSleep, clearedToday, doneAll, bestStreak, projectRows };
   }, [data]);
+
+  /* Insights tab: same shape of derived numbers as `stats`, but over a
+     user-selectable window (7/30/90 days) instead of a fixed week —
+     kept separate so Today/Reserve's fixed 7-day view can't regress. */
+  const rangeStats = useMemo(() => {
+    if (!data) return null;
+    const days = insightRange;
+    const series = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const ds = dateStr(Date.now() - i * DAY);
+      const mins = data.sessions.filter((s) => s.date === ds).reduce((a, s) => a + s.minutes, 0);
+      const log = data.sleepLog[ds];
+      series.push({ ds, mins, sleep: log?.hours || 0, bed: log?.bed || null });
+    }
+    const sleptDays = series.filter((d) => d.sleep > 0);
+    const avgSleep = sleptDays.length ? sleptDays.reduce((a, d) => a + d.sleep, 0) / sleptDays.length : 0;
+    const avgMins = Math.round(series.reduce((a, d) => a + d.mins, 0) / days);
+
+    const bedMinutes = series.filter((d) => d.bed).map((d) => minutesFromNoon(d.bed));
+    const consistency = bedMinutes.length >= 2 ? Math.max(0, Math.round(100 - (stdDev(bedMinutes) / 120) * 100)) : null;
+
+    /* pair each night's sleep with the *next* day's focus minutes */
+    const pairs = [];
+    for (let i = 0; i < series.length - 1; i++) {
+      if (series[i].sleep > 0) pairs.push([series[i].sleep, series[i + 1].mins]);
+    }
+    const r = pairs.length >= 3 ? pearson(pairs.map((p) => p[0]), pairs.map((p) => p[1])) : null;
+
+    const cutoff = series[0].ds;
+    const byProject = {};
+    data.sessions.forEach((s) => {
+      if (s.date >= cutoff) {
+        const p = s.project || "—";
+        byProject[p] = (byProject[p] || 0) + s.minutes;
+      }
+    });
+    const projectRows = Object.entries(byProject).sort((a, b) => b[1] - a[1]);
+
+    return { series, avgSleep, avgMins, consistency, projectRows, corr: { r, n: pairs.length, pairs } };
+  }, [data, insightRange]);
 
   /* completed focus sessions per task — drives the est-progress tag */
   const sessCount = useMemo(() => {
@@ -1251,32 +1361,62 @@ export default function Calibre() {
           <>
             <h1 className="h1">Insights</h1>
             <p className="sub">The week at a glance — where the movement is running true.</p>
+            <div className="toolbar" role="group" aria-label="Insights time range" style={{ marginBottom: 20 }}>
+              {[7, 30, 90].map((d) => (
+                <button key={d} className={`chip ${insightRange === d ? "on" : ""}`} onClick={() => setInsightRange(d)} aria-pressed={insightRange === d}>
+                  {d}D
+                </button>
+              ))}
+            </div>
             <div className="cards">
               <div className="card"><div className="cn">{stats.todayMins}</div><div className="cl">FOCUS MIN TODAY</div></div>
-              <div className="card"><div className="cn">{stats.avgSleep.toFixed(1)}h</div><div className="cl">AVG SLEEP / 7D</div></div>
+              <div className="card"><div className="cn">{rangeStats.avgSleep.toFixed(1)}h</div><div className="cl">AVG SLEEP / {insightRange}D</div></div>
+              {(() => {
+                const band = consistencyBand(rangeStats.consistency);
+                return (
+                  <div className="card">
+                    <div className="cn">{rangeStats.consistency ?? "—"}</div>
+                    <div className="cl">SLEEP CONSISTENCY</div>
+                    <div style={{ fontSize: 10, marginTop: 3, color: band.color }}>{band.label}</div>
+                  </div>
+                );
+              })()}
               <div className="card"><div className="cn">{stats.bestStreak}</div><div className="cl">TOP STREAK</div></div>
               <div className="card"><div className="cn">{stats.clearedToday}</div><div className="cl">CLEARED TODAY</div></div>
             </div>
+
             <div className="panel">
-              <h3>Focus minutes — last 7 days</h3>
-              <div className="barchart">
-                {stats.last7.map((d, i) => {
-                  const max = Math.max(...stats.last7.map((x) => x.mins), 25);
-                  return (
-                    <div className="bc" key={i}>
-                      <div className="bcv">{d.mins || ""}</div>
-                      <div className="bcbar" style={{ height: `${(d.mins / max) * 100}%` }} />
-                      <div className="bcl">{["S", "M", "T", "W", "T", "F", "S"][new Date(d.ds + "T12:00:00").getDay()]}</div>
-                    </div>
-                  );
-                })}
-              </div>
+              <h3>Focus minutes — last {insightRange} days</h3>
+              {insightRange <= 7 ? (
+                <div className="barchart">
+                  {rangeStats.series.map((d, i) => {
+                    const max = Math.max(...rangeStats.series.map((x) => x.mins), 25);
+                    return (
+                      <div className="bc" key={i}>
+                        <div className="bcv">{d.mins || ""}</div>
+                        <div className="bcbar" style={{ height: `${(d.mins / max) * 100}%` }} />
+                        <div className="bcl">{["S", "M", "T", "W", "T", "F", "S"][new Date(d.ds + "T12:00:00").getDay()]}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <>
+                  <Spark points={rangeStats.series.map((d) => d.mins)} color="var(--brass)" width={600} height={90} responsive />
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--slate)", marginTop: 8 }}>
+                    <span>{fmtDue(rangeStats.series[0].ds)}</span>
+                    <span>avg {rangeStats.avgMins} min/day</span>
+                    <span>{fmtDue(rangeStats.series[rangeStats.series.length - 1].ds)}</span>
+                  </div>
+                </>
+              )}
             </div>
+
             <div className="panel">
-              <h3>Focus by project — last 7 days</h3>
-              {stats.projectRows.length === 0 && <div className="empty" style={{ padding: "12px 0" }}>No sessions recorded this week yet.</div>}
-              {stats.projectRows.map(([p, mins]) => {
-                const max = stats.projectRows[0][1];
+              <h3>Focus by project — last {insightRange} days</h3>
+              {rangeStats.projectRows.length === 0 && <div className="empty" style={{ padding: "12px 0" }}>No sessions recorded in this window yet.</div>}
+              {rangeStats.projectRows.map(([p, mins]) => {
+                const max = rangeStats.projectRows[0][1];
                 return (
                   <div className="prow" key={p}>
                     <div className="plbl">{p}</div>
@@ -1286,18 +1426,39 @@ export default function Calibre() {
                 );
               })}
             </div>
+
             <div className="panel">
               <h3>Sleep vs focus — do they track?</h3>
               <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
-                <div>
+                <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontSize: 11, color: "var(--slate)", marginBottom: 6 }}>Sleep (hrs)</div>
-                  <Spark points={stats.last7.map((d) => d.sleep)} color="var(--jade)" max={9} width={240} height={50} />
+                  <Spark points={rangeStats.series.map((d) => d.sleep)} color="var(--jade)" max={9} width={insightRange <= 7 ? 240 : 500} height={50} responsive={insightRange > 7} />
                 </div>
-                <div>
+                <div style={{ flex: 1, minWidth: 200 }}>
                   <div style={{ fontSize: 11, color: "var(--slate)", marginBottom: 6 }}>Focus (min)</div>
-                  <Spark points={stats.last7.map((d) => d.mins)} color="var(--brass)" width={240} height={50} />
+                  <Spark points={rangeStats.series.map((d) => d.mins)} color="var(--brass)" width={insightRange <= 7 ? 240 : 500} height={50} responsive={insightRange > 7} />
                 </div>
               </div>
+            </div>
+
+            <div className="panel">
+              <h3>Sleep vs next-day focus</h3>
+              {rangeStats.corr.n >= 3 ? (
+                <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div>
+                    <Scatter points={rangeStats.corr.pairs} />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--slate)", marginTop: 4, width: 300 }}>
+                      <span>Sleep (hrs) →</span><span>↑ Next-day focus (min)</span>
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <div className="setsub">Each point is one night's sleep against the focus minutes logged the next day ({rangeStats.corr.n} nights compared).</div>
+                    <div className="setlbl" style={{ marginTop: 10, fontSize: 13 }}>{corrLabel(rangeStats.corr.r)}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="empty" style={{ padding: "12px 0" }}>Log a few more nights of sleep to see whether it tracks with your focus the next day.</div>
+              )}
             </div>
           </>
         )}
