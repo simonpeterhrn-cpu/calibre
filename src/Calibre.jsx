@@ -33,6 +33,11 @@ const todayStr = () => dateStr(Date.now());
 
 const DEFAULT_SETTINGS = { work: 25, break: 5, longBreak: 15, cycles: 4, sound: true };
 
+/* palette for user-defined projects — hues that sit well on the deep blue */
+const PROJECT_COLORS = ["#56e1e8", "#4ecdc4", "#ff6b6b", "#ffc46b", "#b98bff", "#6b9bff"];
+const DEFAULT_PROJECTS = ["Resale", "Studio", "Admin", "Teaching", "Personal"]
+  .map((name, i) => ({ name, color: PROJECT_COLORS[i % PROJECT_COLORS.length] }));
+
 const emptyData = () => ({
   tasks: [],
   habits: [],
@@ -42,15 +47,27 @@ const emptyData = () => ({
   focusMinutesTotal: 0,
   settings: { ...DEFAULT_SETTINGS },
   notes: "",
+  projects: DEFAULT_PROJECTS.map((p) => ({ ...p })),
 });
+
+/* bring data written by older versions of the app up to the current shape */
+function migrate(d) {
+  if (!d || typeof d !== "object") return emptyData();
+  const out = { ...emptyData(), ...d };
+  out.settings = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
+  if (!Array.isArray(out.projects) || out.projects.length === 0) {
+    out.projects = DEFAULT_PROJECTS.map((p) => ({ ...p }));
+  }
+  return out;
+}
 
 /* Optional sample content — only loaded on demand from the Regulator tab. */
 function demoData() {
   const d = emptyData();
   const now = Date.now();
   d.tasks = [
-    { id: "t1", label: "Reply to marketplace authentication query", done: false, priority: "high", project: "Resale", due: todayStr(), created: now },
-    { id: "t2", label: "Photograph new piece for listing", done: false, priority: "med", project: "Studio", due: null, created: now },
+    { id: "t1", label: "Reply to marketplace authentication query", done: false, priority: "high", project: "Resale", due: todayStr(), est: 2, created: now },
+    { id: "t2", label: "Photograph new piece for listing", done: false, priority: "med", project: "Studio", due: null, est: 3, created: now },
     { id: "t3", label: "Send courier dispute follow-up", done: true, priority: "high", project: "Admin", due: null, created: now, doneAt: now },
     { id: "t4", label: "Prep course slides", done: false, priority: "low", project: "Teaching", due: null, created: now },
   ];
@@ -109,7 +126,7 @@ function useStore() {
       let local = null;
       try {
         const raw = localStorage.getItem(KEY);
-        if (raw) local = JSON.parse(raw);
+        if (raw) local = migrate(JSON.parse(raw));
       } catch { /* corrupted local data — start fresh */ }
 
       if (supabase && session) {
@@ -121,9 +138,10 @@ function useStore() {
             .maybeSingle();
           if (cancelled) return;
           if (!error && row?.data) {
-            setData(row.data);
-            latest.current = row.data;
-            localStorage.setItem(KEY, JSON.stringify(row.data));
+            const cloud = migrate(row.data);
+            setData(cloud);
+            latest.current = cloud;
+            localStorage.setItem(KEY, JSON.stringify(cloud));
             setSyncState("synced");
             return;
           }
@@ -156,7 +174,7 @@ function useStore() {
     const onStorage = (e) => {
       if (e.key === KEY && e.newValue) {
         try {
-          const next = JSON.parse(e.newValue);
+          const next = migrate(JSON.parse(e.newValue));
           latest.current = next;
           setData(next);
         } catch { /* ignore */ }
@@ -165,6 +183,31 @@ function useStore() {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  /* live cross-device sync: adopt rows written by other devices.
+     Our own writes echo back too — skipped by the deep-equality check.
+     While a local write is pending (debounce timer), local wins. */
+  useEffect(() => {
+    if (!supabase || !session) return;
+    const uid = session.user.id;
+    const ch = supabase
+      .channel(`calibre-sync-${uid}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "calibre_data", filter: `user_id=eq.${uid}` },
+        (payload) => {
+          const incoming = payload.new?.data;
+          if (!incoming || cloudTimer.current) return;
+          const next = migrate(incoming);
+          const s = JSON.stringify(next);
+          if (s === JSON.stringify(latest.current)) return;
+          latest.current = next;
+          setData(next);
+          try { localStorage.setItem(KEY, s); } catch { /* quota */ }
+          setSyncState("synced");
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [session]);
 
   const pushCloud = useCallback((uid) => {
     if (!supabase || !uid || !latest.current) return;
@@ -241,11 +284,19 @@ const PRIORITY = {
   med: { label: "Med", color: "var(--brass)" },
   low: { label: "Low", color: "var(--slate)" },
 };
-const PROJECTS = ["Resale", "Studio", "Admin", "Teaching", "Personal"];
 const fmtDue = (ds) => {
   const [y, m, d] = ds.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 };
+
+const NAV = [
+  { id: "today", label: "Today", icon: "◎" },
+  { id: "tasks", label: "Manifest", icon: "≣" },
+  { id: "habits", label: "Habits", icon: "⊙" },
+  { id: "reserve", label: "Reserve", icon: "◐" },
+  { id: "insights", label: "Insights", icon: "◭" },
+  { id: "regulator", label: "Regulator", icon: "⚙" },
+];
 
 /* ======================= DIAL ======================= */
 function Dial({ mode, secondsLeft, total, running, onToggle, onReset, onSkip }) {
@@ -312,7 +363,7 @@ function Spark({ points, color = "var(--brass)", max, height = 40, width = 200 }
 /* ================= App ================= */
 export default function Calibre() {
   const { data, save, session, syncState } = useStore();
-  const [tab, setTab] = useState("focus");
+  const [tab, setTab] = useState("today");
 
   /* ---------------- timer: timestamp-based, throttle-proof --------------- */
   const [timer, setTimer] = useState(loadTimer);
@@ -390,7 +441,7 @@ export default function Calibre() {
     if (secondsLeft > 0) completedRef.current = false;
   }, [timer.running, secondsLeft, completeSession]);
 
-  function toggleTimer() {
+  const toggleTimer = useCallback(() => {
     if (timer.running) {
       setTimer((t) => ({ ...t, running: false, endAt: null, remaining: secondsLeft }));
     } else {
@@ -399,7 +450,7 @@ export default function Calibre() {
       }
       setTimer((t) => ({ ...t, running: true, endAt: Date.now() + secondsLeft * 1000, remaining: null }));
     }
-  }
+  }, [timer.running, secondsLeft]);
   function resetTimer() { setTimer((t) => ({ ...t, running: false, endAt: null, remaining: null })); }
   function skip() {
     if (timer.mode === "work") {
@@ -414,11 +465,56 @@ export default function Calibre() {
   /* ---------- task form ---------- */
   const [newTask, setNewTask] = useState("");
   const [newPriority, setNewPriority] = useState("med");
-  const [newProject, setNewProject] = useState("Resale");
+  const [newProject, setNewProject] = useState("");
   const [newDue, setNewDue] = useState("");
+  const [newEst, setNewEst] = useState("");
   const [filter, setFilter] = useState("all");
   const [sleepInput, setSleepInput] = useState("");
   const [newHabit, setNewHabit] = useState("");
+
+  /* ---------- inline task editing ---------- */
+  const [editingId, setEditingId] = useState(null);
+  const [edit, setEdit] = useState(null);
+
+  /* ---------- projects form ---------- */
+  const [newProjName, setNewProjName] = useState("");
+  const [newProjColor, setNewProjColor] = useState(PROJECT_COLORS[0]);
+  const importRef = useRef(null);
+
+  /* ---------- undo toast (replaces confirm dialogs for deletions) -------- */
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+  const showUndo = useCallback((msg, snapshot) => {
+    clearTimeout(toastTimer.current);
+    setToast({ msg, snapshot });
+    toastTimer.current = setTimeout(() => setToast(null), 6000);
+  }, []);
+  function undoNow() {
+    if (toast?.snapshot) save(toast.snapshot);
+    clearTimeout(toastTimer.current);
+    setToast(null);
+  }
+
+  /* ---------- keyboard shortcuts: Space wind/pause · 1–6 tabs · N new ---- */
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target;
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable) return;
+      if (e.key === " ") {
+        e.preventDefault();
+        toggleTimer();
+      } else if (e.key >= "1" && e.key <= "6") {
+        setTab(NAV[+e.key - 1].id);
+      } else if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        setTab("tasks");
+        requestAnimationFrame(() => document.getElementById("new-task-input")?.focus());
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleTimer]);
 
   /* ---------- auth form ---------- */
   const [email, setEmail] = useState("");
@@ -437,19 +533,79 @@ export default function Calibre() {
   /* ---------- task ops ---------- */
   function addTask() {
     if (!newTask.trim()) return;
-    save({ ...data, tasks: [...data.tasks, { id: "t" + Date.now(), label: newTask.trim(), done: false, priority: newPriority, project: newProject, due: newDue || null, created: Date.now() }] });
-    setNewTask(""); setNewDue("");
+    const est = parseInt(newEst, 10);
+    save({ ...data, tasks: [...data.tasks, {
+      id: "t" + Date.now(), label: newTask.trim(), done: false, priority: newPriority,
+      project: newProject || data.projects[0]?.name || null, due: newDue || null,
+      est: est >= 1 ? Math.min(est, 20) : null, created: Date.now(),
+    }] });
+    setNewTask(""); setNewDue(""); setNewEst("");
   }
   function toggleTask(id) {
     save({ ...data, tasks: data.tasks.map((t) => t.id === id ? { ...t, done: !t.done, doneAt: !t.done ? Date.now() : null } : t) });
   }
   function delTask(id) {
     const tk = data.tasks.find((t) => t.id === id);
-    if (!confirm(`Remove "${tk?.label}"? This cannot be undone.`)) return;
     if (activeTask === id) setActiveTask(null);
+    showUndo(`Removed "${tk?.label}"`, data);
     save({ ...data, tasks: data.tasks.filter((t) => t.id !== id) });
   }
-  function setActiveFocus(id) { setActiveTask(id); setTab("focus"); }
+  function setActiveFocus(id) { setActiveTask(id); setTab("today"); }
+  function startEdit(tk) {
+    setEditingId(tk.id);
+    setEdit({ label: tk.label, priority: tk.priority, project: tk.project || "", due: tk.due || "", est: tk.est || "" });
+  }
+  function saveEdit() {
+    if (!edit?.label.trim()) return;
+    const est = parseInt(edit.est, 10);
+    save({ ...data, tasks: data.tasks.map((t) => t.id === editingId ? {
+      ...t, label: edit.label.trim(), priority: edit.priority,
+      project: edit.project || null, due: edit.due || null,
+      est: est >= 1 ? Math.min(est, 20) : null,
+    } : t) });
+    setEditingId(null);
+  }
+
+  /* ---------- projects ---------- */
+  const projColor = (name) => data?.projects.find((p) => p.name === name)?.color || "var(--slate)";
+  function addProject() {
+    const name = newProjName.trim();
+    if (!name || data.projects.some((p) => p.name.toLowerCase() === name.toLowerCase())) return;
+    save({ ...data, projects: [...data.projects, { name, color: newProjColor }] });
+    setNewProjName("");
+  }
+  function delProject(name) {
+    showUndo(`Removed project "${name}"`, data);
+    save({ ...data, projects: data.projects.filter((p) => p.name !== name) });
+    if (filter === name) setFilter("all");
+  }
+
+  /* ---------- backup ---------- */
+  function exportData() {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `calibre-backup-${todayStr()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  function importData(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const obj = JSON.parse(reader.result);
+        if (!obj || typeof obj !== "object" || !Array.isArray(obj.tasks)) {
+          alert("That file doesn't look like a Calibre backup."); return;
+        }
+        if (confirm("Replace all current data with this backup?")) save(migrate(obj));
+      } catch {
+        alert("Could not read that file.");
+      }
+    };
+    reader.readAsText(file);
+  }
 
   /* ---------- habits ---------- */
   function toggleHabit(id) {
@@ -470,7 +626,7 @@ export default function Calibre() {
   }
   function delHabit(id) {
     const h = data.habits.find((x) => x.id === id);
-    if (!confirm(`Delete habit "${h?.name}" and its history? This cannot be undone.`)) return;
+    showUndo(`Deleted habit "${h?.name}"`, data);
     save({ ...data, habits: data.habits.filter((x) => x.id !== id) });
   }
 
@@ -514,6 +670,13 @@ export default function Calibre() {
     return { last7, todayMins, avgSleep, clearedToday, doneAll, bestStreak, projectRows };
   }, [data]);
 
+  /* completed focus sessions per task — drives the est-progress tag */
+  const sessCount = useMemo(() => {
+    const m = {};
+    data?.sessions.forEach((s) => { if (s.taskId) m[s.taskId] = (m[s.taskId] || 0) + 1; });
+    return m;
+  }, [data]);
+
   if (!data) {
     return (
       <div className="root" style={{ alignItems: "center", justifyContent: "center", minHeight: "100dvh", display: "flex", fontFamily: "'IBM Plex Mono', monospace", color: "#6fa8c8", fontSize: 13, letterSpacing: ".12em" }}>
@@ -526,14 +689,10 @@ export default function Calibre() {
   const filtered = data.tasks.filter((tk) => filter === "all" ? true : filter === "active" ? !tk.done : filter === "done" ? tk.done : tk.project === filter);
   const sorted = [...filtered].sort((a, b) => (a.done - b.done) || (({ high: 0, med: 1, low: 2 })[a.priority] - ({ high: 0, med: 1, low: 2 })[b.priority]));
 
-  const NAV = [
-    { id: "focus", label: "Focus", icon: "◎" },
-    { id: "tasks", label: "Manifest", icon: "≣" },
-    { id: "habits", label: "Habits", icon: "⊙" },
-    { id: "reserve", label: "Reserve", icon: "◐" },
-    { id: "insights", label: "Insights", icon: "◭" },
-    { id: "regulator", label: "Regulator", icon: "⚙" },
-  ];
+  /* today's docket: overdue, due today, pinned, or high priority */
+  const docket = data.tasks.filter((tk) =>
+    !tk.done && (tk.id === activeTask || (tk.due && tk.due <= t) || tk.priority === "high"));
+
   const SYNC = {
     local: { color: "var(--slate)", label: "Local only — data stays in this browser" },
     syncing: { color: "var(--brass)", label: "Syncing…" },
@@ -707,6 +866,28 @@ export default function Calibre() {
         .empty{padding:30px;text-align:center;color:var(--slate);font-size:13px;}
         .authmsg{font-size:12px;color:var(--slate);margin-top:10px;}
 
+        /* today */
+        .today-grid{display:grid;grid-template-columns:minmax(300px,370px) minmax(0,1fr);gap:32px;align-items:start;}
+        .today-side .panel{margin-bottom:14px;}
+        .drow{display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid rgba(86,225,232,0.07);}
+        .drow:last-child{border-bottom:none;}
+
+        /* shared bits */
+        .proj{display:inline-flex;align-items:center;gap:5px;}
+        .pdot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;}
+        .esttag{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--slate);}
+        .swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;}
+        .swatch.on{border-color:var(--ivory);}
+        .kbd{font-family:'IBM Plex Mono',monospace;font-size:11px;border:1px solid var(--steel);
+          border-radius:4px;padding:1px 7px;color:var(--ivory);background:rgba(86,225,232,0.07);}
+        .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:60;
+          background:rgba(2,14,56,0.94);border:1px solid var(--steel);color:var(--ivory);
+          padding:12px 18px;border-radius:11px;display:flex;gap:16px;align-items:center;font-size:13px;
+          backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 10px 34px rgba(0,0,0,0.45);}
+        .toast button{background:none;border:none;color:var(--brass);cursor:pointer;
+          font-weight:600;font-size:13px;font-family:inherit;padding:0;}
+        input[type="number"].inp::-webkit-inner-spin-button{opacity:1;}
+
         /* ---------- mobile ---------- */
         @media (max-width: 700px){
           .root{flex-direction:column;}
@@ -722,6 +903,8 @@ export default function Calibre() {
           .dial-svg{width:240px;height:240px;}
           .comp{width:calc(50% - 9px);}
           .stat{min-width:96px;padding:12px 14px;}
+          .today-grid{grid-template-columns:1fr;gap:22px;}
+          .toast{bottom:calc(76px + env(safe-area-inset-bottom));width:calc(100% - 32px);max-width:420px;}
         }
       `}</style>
 
@@ -736,22 +919,86 @@ export default function Calibre() {
       </nav>
 
       <div className="main">
-        {/* FOCUS */}
-        {tab === "focus" && (
+        {/* TODAY */}
+        {tab === "today" && (
           <>
-            <h1 className="h1">Focus</h1>
-            <p className="sub">One movement at a time — {S.work} on, {S.break} to rest.</p>
-            <Dial mode={timer.mode} secondsLeft={secondsLeft} total={total} running={timer.running}
-              onToggle={toggleTimer} onReset={resetTimer} onSkip={skip} />
-            <div className="focus-task">
-              {activeTask
-                ? <>Winding on <b>{data.tasks.find((x) => x.id === activeTask)?.label || "—"}</b> · <button className="laction" onClick={() => setActiveTask(null)}>clear</button></>
-                : <>No task pinned — pick one from the Manifest to track sessions against it.</>}
-            </div>
-            <div className="stat-row">
-              <div className="stat"><div className="num">{stats.todayMins}</div><div className="lbl">MIN TODAY</div></div>
-              <div className="stat"><div className="num">{data.completedSessions}</div><div className="lbl">SESSIONS</div></div>
-              <div className="stat"><div className="num">{Math.round(data.focusMinutesTotal / 60)}h</div><div className="lbl">ALL-TIME</div></div>
+            <h1 className="h1">Today</h1>
+            <p className="sub">{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} — {S.work} on, {S.break} to rest.</p>
+            <div className="today-grid">
+              <div>
+                <Dial mode={timer.mode} secondsLeft={secondsLeft} total={total} running={timer.running}
+                  onToggle={toggleTimer} onReset={resetTimer} onSkip={skip} />
+                <div className="focus-task">
+                  {activeTask
+                    ? <>Winding on <b>{data.tasks.find((x) => x.id === activeTask)?.label || "—"}</b> · <button className="laction" onClick={() => setActiveTask(null)}>clear</button></>
+                    : <>No task pinned — pick one from the docket to track sessions against it.</>}
+                </div>
+                <div className="stat-row">
+                  <div className="stat"><div className="num">{stats.todayMins}</div><div className="lbl">MIN TODAY</div></div>
+                  <div className="stat"><div className="num">{data.completedSessions}</div><div className="lbl">SESSIONS</div></div>
+                  <div className="stat"><div className="num">{Math.round(data.focusMinutesTotal / 60)}h</div><div className="lbl">ALL-TIME</div></div>
+                </div>
+              </div>
+              <div className="today-side">
+                <div className="panel">
+                  <h3>On the docket</h3>
+                  {docket.length === 0 && (
+                    <div className="setsub">Nothing pressing — overdue, due-today, pinned and high-priority entries appear here.</div>
+                  )}
+                  {docket.slice(0, 8).map((tk) => {
+                    const overdue = tk.due && tk.due < t;
+                    return (
+                      <div className="drow" key={tk.id}>
+                        <button className={`tick ${tk.done ? "on" : ""}`} onClick={() => toggleTask(tk.id)}
+                          role="checkbox" aria-checked={tk.done} aria-label={`Mark "${tk.label}" done`} />
+                        <div className="lbody">
+                          <div className="llabel" style={{ fontSize: 13 }}>{tk.label}</div>
+                          <div className="lmeta">
+                            <span className="proj"><span className="pdot" style={{ background: projColor(tk.project) }} />{tk.project}</span>
+                            {tk.due && <span className={`duetag ${overdue ? "over" : ""}`}>{overdue ? "overdue" : "due today"}</span>}
+                            {tk.est && <span className="esttag">◉ {sessCount[tk.id] || 0}/{tk.est}</span>}
+                          </div>
+                        </div>
+                        {activeTask !== tk.id && <button className="laction" onClick={() => setActiveTask(tk.id)}>focus</button>}
+                        {activeTask === tk.id && <span className="esttag" style={{ color: "var(--brass)" }}>pinned</span>}
+                      </div>
+                    );
+                  })}
+                  {docket.length > 8 && <div className="setsub" style={{ marginTop: 8 }}>+{docket.length - 8} more in the Manifest.</div>}
+                </div>
+                <div className="panel">
+                  <h3>Habits</h3>
+                  {data.habits.length === 0 && <div className="setsub">No habits yet — add them in the Habits tab.</div>}
+                  {data.habits.map((h) => {
+                    const doneToday = !!h.history[t];
+                    return (
+                      <div className="drow" key={h.id}>
+                        <div className="lbody">
+                          <span style={{ fontSize: 13 }}>{h.name}</span>
+                          <span className="esttag" style={{ marginLeft: 8 }}>{calcStreak(h.history)}d streak</span>
+                        </div>
+                        <button className={`comp-btn ${doneToday ? "on" : ""}`} style={{ marginTop: 0, padding: "5px 12px" }}
+                          onClick={() => toggleHabit(h.id)} aria-pressed={doneToday}>
+                          {doneToday ? "✓" : "Mark"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="panel">
+                  <h3>Reserve</h3>
+                  {data.sleepLog[t] ? (
+                    <div className="setsub"><b style={{ color: "var(--jade)", fontFamily: "'IBM Plex Mono',monospace" }}>{data.sleepLog[t]}h</b> logged last night · {stats.avgSleep.toFixed(1)}h average this week.</div>
+                  ) : (
+                    <div className="composer" style={{ marginTop: 0 }}>
+                      <input className="inp" style={{ flex: 1, minWidth: 130 }} placeholder="Hours slept last night" aria-label="Hours slept last night"
+                        inputMode="decimal" value={sleepInput}
+                        onChange={(e) => setSleepInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && logSleep()} />
+                      <button className="addbtn" onClick={logSleep}>Log</button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </>
         )}
@@ -762,7 +1009,7 @@ export default function Calibre() {
             <h1 className="h1">Manifest</h1>
             <p className="sub">{stats.doneAll} of {data.tasks.length} entries cleared · {stats.clearedToday} today.</p>
             <div className="toolbar" role="group" aria-label="Filter tasks">
-              {["all", "active", "done", ...PROJECTS].map((f) => (
+              {["all", "active", "done", ...data.projects.map((p) => p.name)].map((f) => (
                 <button key={f} className={`chip ${filter === f ? "on" : ""}`} onClick={() => setFilter(f)} aria-pressed={filter === f}>
                   {f === "all" ? "All" : f === "active" ? "Active" : f === "done" ? "Cleared" : f}
                 </button>
@@ -772,6 +1019,31 @@ export default function Calibre() {
               {sorted.length === 0 && <div className="empty">Nothing here. Add an entry below.</div>}
               {sorted.map((tk) => {
                 const overdue = tk.due && !tk.done && tk.due < t;
+                if (editingId === tk.id) {
+                  return (
+                    <div className="lrow" key={tk.id}>
+                      <div className="lbody">
+                        <div className="composer" style={{ marginTop: 0 }}>
+                          <input className="inp" style={{ flex: 1, minWidth: 150 }} value={edit.label} autoFocus aria-label="Task label"
+                            onChange={(e) => setEdit({ ...edit, label: e.target.value })}
+                            onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }} />
+                          <select className="inp" value={edit.priority} onChange={(e) => setEdit({ ...edit, priority: e.target.value })} aria-label="Priority">
+                            <option value="high">High</option><option value="med">Med</option><option value="low">Low</option>
+                          </select>
+                          <select className="inp" value={edit.project} onChange={(e) => setEdit({ ...edit, project: e.target.value })} aria-label="Project">
+                            {!data.projects.some((p) => p.name === edit.project) && <option value={edit.project}>{edit.project || "—"}</option>}
+                            {data.projects.map((p) => <option key={p.name}>{p.name}</option>)}
+                          </select>
+                          <input type="date" className="inp" value={edit.due} onChange={(e) => setEdit({ ...edit, due: e.target.value })} aria-label="Due date" />
+                          <input className="inp" style={{ width: 76 }} type="number" min="1" max="20" placeholder="Est ◉" aria-label="Estimated sessions"
+                            value={edit.est} onChange={(e) => setEdit({ ...edit, est: e.target.value })} />
+                        </div>
+                      </div>
+                      <button className="laction" onClick={saveEdit}>save</button>
+                      <button className="laction" onClick={() => setEditingId(null)}>cancel</button>
+                    </div>
+                  );
+                }
                 return (
                   <div className="lrow" key={tk.id}>
                     <button className={`tick ${tk.done ? "on" : ""}`} onClick={() => toggleTask(tk.id)}
@@ -782,26 +1054,30 @@ export default function Calibre() {
                       <div className={`llabel ${tk.done ? "done" : ""}`}>{tk.label}</div>
                       <div className="lmeta">
                         <span className="badge" style={{ background: PRIORITY[tk.priority].color + "22", color: PRIORITY[tk.priority].color }}>{PRIORITY[tk.priority].label}</span>
-                        <span className="proj">{tk.project}</span>
+                        <span className="proj"><span className="pdot" style={{ background: projColor(tk.project) }} />{tk.project}</span>
                         {tk.due && <span className={`duetag ${overdue ? "over" : ""}`}>{overdue ? "overdue · " : "due "}{fmtDue(tk.due)}</span>}
+                        {(tk.est || sessCount[tk.id]) && <span className="esttag">◉ {sessCount[tk.id] || 0}{tk.est ? `/${tk.est}` : ""}</span>}
                       </div>
                     </div>
                     {!tk.done && <button className="laction" onClick={() => setActiveFocus(tk.id)}>focus</button>}
+                    <button className="laction" onClick={() => startEdit(tk)} aria-label={`Edit "${tk.label}"`}>edit</button>
                     <button className="laction del" onClick={() => delTask(tk.id)} aria-label={`Remove "${tk.label}"`}>remove</button>
                   </div>
                 );
               })}
             </div>
             <div className="composer">
-              <input className="inp" style={{ flex: 1, minWidth: 180 }} placeholder="New entry…" aria-label="New task" value={newTask}
+              <input id="new-task-input" className="inp" style={{ flex: 1, minWidth: 180 }} placeholder="New entry…" aria-label="New task" value={newTask}
                 onChange={(e) => setNewTask(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTask()} />
               <select className="inp" value={newPriority} onChange={(e) => setNewPriority(e.target.value)} aria-label="Priority">
                 <option value="high">High</option><option value="med">Med</option><option value="low">Low</option>
               </select>
-              <select className="inp" value={newProject} onChange={(e) => setNewProject(e.target.value)} aria-label="Project">
-                {PROJECTS.map((p) => <option key={p}>{p}</option>)}
+              <select className="inp" value={newProject || data.projects[0]?.name || ""} onChange={(e) => setNewProject(e.target.value)} aria-label="Project">
+                {data.projects.map((p) => <option key={p.name}>{p.name}</option>)}
               </select>
               <input type="date" className="inp" value={newDue} onChange={(e) => setNewDue(e.target.value)} aria-label="Due date (optional)" />
+              <input className="inp" style={{ width: 76 }} type="number" min="1" max="20" placeholder="Est ◉" aria-label="Estimated sessions (optional)"
+                value={newEst} onChange={(e) => setNewEst(e.target.value)} />
               <button className="addbtn" onClick={addTask}>Add</button>
             </div>
           </>
@@ -982,6 +1258,49 @@ export default function Calibre() {
             </div>
 
             <div className="panel">
+              <h3>Projects</h3>
+              {data.projects.map((p) => (
+                <div className="setrow" key={p.name}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span className="pdot" style={{ background: p.color, width: 11, height: 11 }} />
+                    <span className="setlbl">{p.name}</span>
+                  </div>
+                  <button className="laction del" onClick={() => delProject(p.name)} aria-label={`Remove project "${p.name}"`}>remove</button>
+                </div>
+              ))}
+              <div className="composer">
+                <input className="inp" style={{ flex: 1, minWidth: 140 }} placeholder="New project…" aria-label="New project name"
+                  value={newProjName} onChange={(e) => setNewProjName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addProject()} />
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  {PROJECT_COLORS.map((c) => (
+                    <button key={c} className={`swatch ${newProjColor === c ? "on" : ""}`} style={{ background: c }}
+                      onClick={() => setNewProjColor(c)} aria-label={`Colour ${c}`} aria-pressed={newProjColor === c} />
+                  ))}
+                </div>
+                <button className="addbtn" onClick={addProject}>Add</button>
+              </div>
+            </div>
+
+            <div className="panel">
+              <h3>Backup</h3>
+              <div className="setsub" style={{ marginBottom: 4 }}>
+                Download everything as a JSON file, or restore from a previous export.
+              </div>
+              <button className="quiet" onClick={exportData}>Export data</button>
+              <button className="quiet" style={{ marginLeft: 10 }} onClick={() => importRef.current?.click()}>Import backup…</button>
+              <input ref={importRef} type="file" accept="application/json,.json" style={{ display: "none" }}
+                onChange={(e) => { importData(e.target.files?.[0]); e.target.value = ""; }} />
+            </div>
+
+            <div className="panel">
+              <h3>Shortcuts</h3>
+              <div className="setsub">
+                <span className="kbd">Space</span> wind / pause · <span className="kbd">1–6</span> switch tabs · <span className="kbd">N</span> new entry
+              </div>
+            </div>
+
+            <div className="panel">
               <h3>Working notes</h3>
               <textarea className="notes" placeholder="Scratchpad — thoughts, reminders, anything worth keeping…"
                 aria-label="Working notes" value={data.notes} onChange={(e) => saveNotes(e.target.value)} />
@@ -996,6 +1315,13 @@ export default function Calibre() {
           </>
         )}
       </div>
+
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast.msg}</span>
+          <button onClick={undoNow}>Undo</button>
+        </div>
+      )}
     </div>
   );
 }

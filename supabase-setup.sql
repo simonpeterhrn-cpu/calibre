@@ -39,6 +39,12 @@ create policy "update own row"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+-- 4. Live cross-device sync: let Realtime broadcast row changes.
+--    (RLS still applies — each user only receives their own row.)
+--    If you already ran an earlier version of this file, just run
+--    this one line again in the SQL Editor.
+alter publication supabase_realtime add table public.calibre_data;
+
 -- ============================================================
 -- Also do these two things in the Supabase dashboard:
 --
