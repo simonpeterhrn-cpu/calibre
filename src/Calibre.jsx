@@ -343,7 +343,7 @@ export default function Calibre() {
           --parchment:#ECE6D8;--brass:#B08D57;--brass-lo:#8A6E43;--crimson:#A23B2E;
           --jade:#4E8D6E;--ivory:#F5F1E8;--slate:#8A9099;
           font-family:'IBM Plex Sans',sans-serif;background:var(--ink);color:var(--ivory);
-          display:flex;border-radius:14px;overflow:hidden;border:1px solid var(--steel);min-height:640px;
+          display:flex;overflow:hidden;min-height:100vh;
         }
         .root *{box-sizing:border-box;}
         .nav{width:104px;background:#0C0E11;border-right:1px solid var(--steel);
