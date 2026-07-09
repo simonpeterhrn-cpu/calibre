@@ -31,7 +31,7 @@ const DAY = 86400000;
 const dateStr = (ms) => new Date(ms).toLocaleDateString("sv-SE");
 const todayStr = () => dateStr(Date.now());
 
-const DEFAULT_SETTINGS = { work: 25, break: 5, longBreak: 15, cycles: 4, sound: true };
+const DEFAULT_SETTINGS = { work: 25, break: 5, longBreak: 15, cycles: 4, sound: true, targetBed: "23:00", targetWake: "07:00" };
 
 /* palette for user-defined projects — hues that sit well on the deep blue */
 const PROJECT_COLORS = ["#56e1e8", "#4ecdc4", "#ff6b6b", "#ffc46b", "#b98bff", "#6b9bff"];
@@ -41,7 +41,7 @@ const DEFAULT_PROJECTS = ["Resale", "Studio", "Admin", "Teaching", "Personal"]
 const emptyData = () => ({
   tasks: [],
   habits: [],
-  sleepLog: {}, // date -> hours
+  sleepLog: {}, // date -> {bed, wake, hours}
   sessions: [], // {date, mode, minutes, taskId, project}
   completedSessions: 0,
   focusMinutesTotal: 0,
@@ -58,6 +58,14 @@ function migrate(d) {
   if (!Array.isArray(out.projects) || out.projects.length === 0) {
     out.projects = DEFAULT_PROJECTS.map((p) => ({ ...p }));
   }
+  /* sleepLog used to be date -> hours (a plain number); now it's
+     date -> {bed, wake, hours} so bedtime/wake-time can be logged too */
+  const norm = {};
+  for (const [ds, v] of Object.entries(out.sleepLog || {})) {
+    if (typeof v === "number") norm[ds] = { bed: null, wake: null, hours: v };
+    else if (v && typeof v === "object") norm[ds] = { bed: v.bed || null, wake: v.wake || null, hours: v.hours || 0 };
+  }
+  out.sleepLog = norm;
   return out;
 }
 
@@ -81,9 +89,46 @@ function demoData() {
     for (let i = 6; i >= 1; i--) history[dateStr(now - i * DAY)] = !!patterns[idx][6 - i];
     return { id: "h" + (idx + 1), name, best: 0, history };
   });
-  const hrs = [7.5, 6, 8, 7, 6.5, 7.5, 8];
-  for (let i = 6; i >= 0; i--) d.sleepLog[dateStr(now - i * DAY)] = hrs[6 - i];
+  const nights = [
+    ["23:00", "06:30"], ["00:15", "06:15"], ["22:30", "06:30"], ["23:15", "06:15"],
+    ["23:50", "06:20"], ["23:00", "06:30"], ["22:45", "06:45"],
+  ];
+  for (let i = 6; i >= 0; i--) {
+    const [bed, wake] = nights[6 - i];
+    d.sleepLog[dateStr(now - i * DAY)] = { bed, wake, hours: sleepHours(bed, wake) };
+  }
   return d;
+}
+
+/* Hours between a bedtime and a wake time, both "HH:MM", assuming the
+   wake time falls the next calendar day if it isn't after bedtime. */
+function sleepHours(bed, wake) {
+  if (!bed || !wake) return null;
+  const [bh, bm] = bed.split(":").map(Number);
+  const [wh, wm] = wake.split(":").map(Number);
+  let start = bh * 60 + bm, end = wh * 60 + wm;
+  if (end <= start) end += 24 * 60;
+  return Math.round(((end - start) / 60) * 10) / 10;
+}
+
+/* Signed minutes between two "HH:MM" clock times, wrapped to the
+   shortest direction around midnight (so 23:50 vs 23:00 reads as
+   +50, not -1390). */
+function timeDeltaMin(actual, target) {
+  if (!actual || !target) return null;
+  const [ah, am] = actual.split(":").map(Number);
+  const [th, tm] = target.split(":").map(Number);
+  let diff = (ah * 60 + am) - (th * 60 + tm);
+  if (diff > 720) diff -= 1440;
+  if (diff < -720) diff += 1440;
+  return diff;
+}
+function fmtDelta(min) {
+  if (min == null || min === 0) return "on target";
+  const abs = Math.abs(min);
+  const h = Math.floor(abs / 60), m = Math.round(abs % 60);
+  const txt = h ? `${h}h ${m}m` : `${m}m`;
+  return `${txt} ${min > 0 ? "later" : "earlier"} than target`;
 }
 
 /* Current streak from history. If today is unchecked the chain isn't
@@ -469,8 +514,12 @@ export default function Calibre() {
   const [newDue, setNewDue] = useState("");
   const [newEst, setNewEst] = useState("");
   const [filter, setFilter] = useState("all");
-  const [sleepInput, setSleepInput] = useState("");
   const [newHabit, setNewHabit] = useState("");
+
+  /* ---------- sleep form: bedtime + wake time, not a raw hours count ---- */
+  const [bedInput, setBedInput] = useState("");
+  const [wakeInput, setWakeInput] = useState("");
+  const [editingSleep, setEditingSleep] = useState(false);
 
   /* ---------- inline task editing ---------- */
   const [editingId, setEditingId] = useState(null);
@@ -632,10 +681,10 @@ export default function Calibre() {
 
   /* ---------- sleep ---------- */
   function logSleep() {
-    const v = parseFloat(sleepInput);
-    if (isNaN(v) || v < 0 || v > 16) return;
-    save({ ...data, sleepLog: { ...data.sleepLog, [todayStr()]: Math.round(v * 10) / 10 } });
-    setSleepInput("");
+    const hours = sleepHours(bedInput, wakeInput);
+    if (hours == null || hours <= 0 || hours > 16) return;
+    save({ ...data, sleepLog: { ...data.sleepLog, [todayStr()]: { bed: bedInput, wake: wakeInput, hours } } });
+    setBedInput(""); setWakeInput(""); setEditingSleep(false);
   }
 
   /* ---------- settings ---------- */
@@ -649,7 +698,7 @@ export default function Calibre() {
     for (let i = 6; i >= 0; i--) {
       const ds = dateStr(Date.now() - i * DAY);
       const mins = data.sessions.filter((s) => s.date === ds).reduce((a, s) => a + s.minutes, 0);
-      last7.push({ ds, mins, sleep: data.sleepLog[ds] || 0 });
+      last7.push({ ds, mins, sleep: data.sleepLog[ds]?.hours || 0 });
     }
     const todayMins = last7[6].mins;
     const logged = last7.filter((d) => d.sleep > 0);
@@ -692,6 +741,10 @@ export default function Calibre() {
   /* today's docket: overdue, due today, pinned, or high priority */
   const docket = data.tasks.filter((tk) =>
     !tk.done && (tk.id === activeTask || (tk.due && tk.due <= t) || tk.priority === "high"));
+
+  const targetHours = sleepHours(S.targetBed, S.targetWake) ?? 8;
+  const todayLog = data.sleepLog[t] || null;
+  const bedDelta = todayLog?.bed ? timeDeltaMin(todayLog.bed, S.targetBed) : null;
 
   const SYNC = {
     local: { color: "var(--slate)", label: "Local only — data stays in this browser" },
@@ -784,7 +837,7 @@ export default function Calibre() {
         .inp:focus-visible{outline:2px solid var(--brass);outline-offset:1px;}
         select.inp{cursor:pointer;}
         select.inp option{background:#021242;color:var(--ivory);}
-        input[type="date"].inp{color-scheme:dark;}
+        input[type="date"].inp,input[type="time"].inp{color-scheme:dark;}
         .addbtn{background:var(--brass);border:none;color:#020d2e;padding:0 20px;border-radius:8px;
           font-weight:600;cursor:pointer;font-family:inherit;min-height:38px;}
         .addbtn:active{background:var(--brass-lo);}
@@ -811,12 +864,13 @@ export default function Calibre() {
 
         /* reserve */
         .gauge-wrap{display:flex;justify-content:center;margin:6px 0 8px;}
-        .weekbars{display:flex;gap:10px;justify-content:center;margin-top:26px;}
+        .weekbars{display:flex;gap:10px;justify-content:center;margin-top:26px;height:96px;}
         .wb{width:26px;height:96px;background:rgba(86,225,232,0.12);border-radius:4px;display:flex;
           align-items:flex-end;position:relative;}
         .wbf{width:100%;background:var(--brass);border-radius:4px;}
         .wbl{position:absolute;bottom:-20px;width:100%;text-align:center;font-size:9px;color:var(--slate);}
         .wbv{position:absolute;top:-16px;width:100%;text-align:center;font-size:9px;color:var(--slate);font-family:'IBM Plex Mono',monospace;}
+        .target-line{position:absolute;left:0;right:0;height:0;border-top:1px dashed var(--jade);opacity:.55;pointer-events:none;}
 
         /* insights */
         .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:26px;}
@@ -987,13 +1041,17 @@ export default function Calibre() {
                 </div>
                 <div className="panel">
                   <h3>Reserve</h3>
-                  {data.sleepLog[t] ? (
-                    <div className="setsub"><b style={{ color: "var(--jade)", fontFamily: "'IBM Plex Mono',monospace" }}>{data.sleepLog[t]}h</b> logged last night · {stats.avgSleep.toFixed(1)}h average this week.</div>
+                  {todayLog ? (
+                    <div className="setsub">
+                      <b style={{ color: "var(--jade)", fontFamily: "'IBM Plex Mono',monospace" }}>{todayLog.hours}h</b>
+                      {todayLog.bed && todayLog.wake && <> · {todayLog.bed} → {todayLog.wake}</>} · {stats.avgSleep.toFixed(1)}h average this week.
+                    </div>
                   ) : (
                     <div className="composer" style={{ marginTop: 0 }}>
-                      <input className="inp" style={{ flex: 1, minWidth: 130 }} placeholder="Hours slept last night" aria-label="Hours slept last night"
-                        inputMode="decimal" value={sleepInput}
-                        onChange={(e) => setSleepInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && logSleep()} />
+                      <input type="time" className="inp" style={{ flex: 1, minWidth: 96 }} aria-label="Bedtime"
+                        value={bedInput} onChange={(e) => setBedInput(e.target.value)} />
+                      <input type="time" className="inp" style={{ flex: 1, minWidth: 96 }} aria-label="Wake time"
+                        value={wakeInput} onChange={(e) => setWakeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && logSleep()} />
                       <button className="addbtn" onClick={logSleep}>Log</button>
                     </div>
                   )}
@@ -1122,8 +1180,9 @@ export default function Calibre() {
           <>
             <h1 className="h1">Reserve</h1>
             <p className="sub">Sleep, read like a power reserve — the energy left to run on.</p>
-            <ReserveGauge avg={stats.avgSleep} />
-            <div className="weekbars">
+            <ReserveGauge avg={stats.avgSleep} target={targetHours} />
+            <div className="weekbars" style={{ position: "relative" }}>
+              <div className="target-line" style={{ bottom: `${Math.min((targetHours / 9) * 100, 100)}%` }} aria-hidden="true" />
               {stats.last7.map((d, i) => (
                 <div className="wb" key={i}>
                   {d.sleep > 0 && <div className="wbv">{d.sleep}</div>}
@@ -1132,11 +1191,57 @@ export default function Calibre() {
                 </div>
               ))}
             </div>
-            <div className="composer" style={{ justifyContent: "center", marginTop: 40 }}>
-              <input className="inp" style={{ maxWidth: 220 }} placeholder="Hours slept last night" aria-label="Hours slept last night"
-                inputMode="decimal" value={sleepInput}
-                onChange={(e) => setSleepInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && logSleep()} />
-              <button className="addbtn" onClick={logSleep}>Log</button>
+
+            <div className="panel" style={{ maxWidth: 480, margin: "40px auto 0" }}>
+              <h3>Last night</h3>
+              {todayLog && !editingSleep ? (
+                <>
+                  <div className="setlbl">
+                    {todayLog.bed || "—"} <span style={{ color: "var(--slate)" }}>→</span> {todayLog.wake || "—"}
+                    {" · "}<b style={{ color: "var(--jade)", fontFamily: "'IBM Plex Mono',monospace" }}>{todayLog.hours}h</b>
+                  </div>
+                  {bedDelta != null && (
+                    <div className="setsub" style={{ marginTop: 6, color: Math.abs(bedDelta) <= 15 ? "var(--jade)" : "var(--crimson)" }}>
+                      Bedtime {fmtDelta(bedDelta)}
+                    </div>
+                  )}
+                  <button className="quiet" onClick={() => { setBedInput(todayLog.bed || ""); setWakeInput(todayLog.wake || ""); setEditingSleep(true); }}>
+                    Edit
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="composer" style={{ marginTop: 0 }}>
+                    <input type="time" className="inp" aria-label="Bedtime" value={bedInput} onChange={(e) => setBedInput(e.target.value)} />
+                    <input type="time" className="inp" aria-label="Wake time" value={wakeInput} onChange={(e) => setWakeInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && logSleep()} />
+                    <button className="addbtn" onClick={logSleep}>{todayLog ? "Update" : "Log night"}</button>
+                    {editingSleep && <button className="laction" onClick={() => { setEditingSleep(false); setBedInput(""); setWakeInput(""); }}>cancel</button>}
+                  </div>
+                  {bedInput && wakeInput && (() => {
+                    const preview = sleepHours(bedInput, wakeInput);
+                    const suspicious = preview > 16;
+                    return (
+                      <div className="setsub" style={{ marginTop: 8, color: suspicious ? "var(--crimson)" : undefined }}>
+                        {preview}h of sleep{suspicious ? " — check the times, that seems too long to log" : ""}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+
+            <div className="panel" style={{ maxWidth: 480, margin: "14px auto 0" }}>
+              <h3>Target schedule</h3>
+              <div className="setrow">
+                <div><div className="setlbl">Bedtime</div><div className="setsub">Aim to be asleep by</div></div>
+                <input type="time" className="inp" value={S.targetBed} onChange={(e) => setS({ targetBed: e.target.value })} aria-label="Target bedtime" />
+              </div>
+              <div className="setrow">
+                <div><div className="setlbl">Wake time</div><div className="setsub">Aim to be up by</div></div>
+                <input type="time" className="inp" value={S.targetWake} onChange={(e) => setS({ targetWake: e.target.value })} aria-label="Target wake time" />
+              </div>
+              <div className="setsub" style={{ marginTop: 8 }}>Target reserve: {targetHours.toFixed(1)}h a night</div>
             </div>
           </>
         )}
@@ -1327,7 +1432,7 @@ export default function Calibre() {
 }
 
 /* ============ Reserve gauge ============ */
-function ReserveGauge({ avg }) {
+function ReserveGauge({ avg, target }) {
   const pct = Math.min(avg / 9, 1);
   const r = 82, cx = 110, cy = 110;
   const start = -220, sweep = 260;
@@ -1343,12 +1448,21 @@ function ReserveGauge({ avg }) {
     const [x2, y2] = [cx + (r + 12) * Math.cos((deg * Math.PI) / 180), cy + (r + 12) * Math.sin((deg * Math.PI) / 180)];
     ticks.push(<line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--steel)" strokeWidth="1.5" />);
   }
+  const targetPct = target != null ? Math.min(target / 9, 1) : null;
+  let targetMark = null;
+  if (targetPct != null) {
+    const deg = start + sweep * targetPct;
+    const [x1, y1] = [cx + (r - 7) * Math.cos((deg * Math.PI) / 180), cy + (r - 7) * Math.sin((deg * Math.PI) / 180)];
+    const [x2, y2] = [cx + (r + 7) * Math.cos((deg * Math.PI) / 180), cy + (r + 7) * Math.sin((deg * Math.PI) / 180)];
+    targetMark = <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--jade)" strokeWidth="3" strokeLinecap="round" />;
+  }
   return (
     <div className="gauge-wrap">
-      <svg viewBox="0 0 220 200" width="300" height="270" style={{ maxWidth: "80vw" }} role="img" aria-label={`Average sleep over 7 days: ${avg.toFixed(1)} hours`}>
+      <svg viewBox="0 0 220 200" width="300" height="270" style={{ maxWidth: "80vw" }} role="img" aria-label={`Average sleep over 7 days: ${avg.toFixed(1)} hours, target ${target?.toFixed(1)} hours`}>
         {ticks}
         <path d={`M ${sx} ${sy} A ${r} ${r} 0 1 1 ${ex} ${ey}`} fill="none" stroke="var(--steel)" strokeWidth="11" strokeLinecap="round" />
         {pct > 0 && <path d={`M ${sx} ${sy} A ${r} ${r} 0 ${large} 1 ${fx} ${fy}`} fill="none" stroke="var(--brass)" strokeWidth="11" strokeLinecap="round" />}
+        {targetMark}
         <text x={cx} y={cy - 4} textAnchor="middle" style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 26, fill: "var(--ivory)" }}>{avg.toFixed(1)}h</text>
         <text x={cx} y={cy + 18} textAnchor="middle" style={{ fontSize: 10, fill: "var(--slate)", letterSpacing: ".08em" }}>AVG RESERVE / 7D</text>
       </svg>
