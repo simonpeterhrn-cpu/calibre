@@ -1,16 +1,31 @@
-# React + Vite
+# Calibre
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A productivity instrument built with watchmaking precision — focus timer,
+task manifest, habit tracker, sleep reserve and weekly insights.
 
-Currently, two official plugins are available:
+React 19 + Vite, with an optional Supabase cloud sync (magic-link auth,
+per-user rows, Row Level Security).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Run locally
 
-## React Compiler
+```
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Cloud sync (optional)
 
-## Expanding the Oxlint configuration
+1. Create a Supabase project and run `supabase-setup.sql` in its SQL Editor.
+2. In the dashboard: enable Email auth, and set the Site URL / redirect
+   allow-list to your deployed URL (see notes at the bottom of the SQL file).
+3. Copy `.env.example` to `.env.local` and fill in your project URL and anon key.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Without keys — or without signing in — the app runs fully on localStorage.
+
+## Notes
+
+- The timer is wall-clock based: it stays accurate in background tabs,
+  shows the countdown in the tab title, and survives page refreshes.
+- Dates use the local timezone (Europe/Paris safe), not UTC.
+- "Load sample data" in the Regulator tab populates demo content;
+  "Reset all data" clears everything.
