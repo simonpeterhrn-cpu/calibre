@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { supabase } from "./supabase";
 
 /* ============================================================
    CALIBRE — a productivity instrument built with watchmaking
@@ -79,21 +80,46 @@ function withDemo(d) {
 function useStore() {
   const [data, setData] = useState(null);
   const ready = useRef(false);
+
   useEffect(() => {
     (async () => {
       try {
-        const r = await window.storage.get(KEY);
-        setData(r ? JSON.parse(r.value) : withDemo(seed()));
+        if (supabase) {
+          const { data: row } = await supabase
+            .from('calibre_data')
+            .select('data')
+            .eq('id', 'main')
+            .single();
+          if (row?.data) {
+            setData(row.data);
+            localStorage.setItem(KEY, JSON.stringify(row.data));
+            ready.current = true;
+            return;
+          }
+        }
+      } catch (_) {}
+      // fallback: localStorage
+      try {
+        const raw = localStorage.getItem(KEY);
+        setData(raw ? JSON.parse(raw) : withDemo(seed()));
       } catch {
         setData(withDemo(seed()));
       }
       ready.current = true;
     })();
   }, []);
+
   const save = useCallback((next) => {
     setData(next);
-    window.storage.set(KEY, JSON.stringify(next)).catch(() => {});
+    localStorage.setItem(KEY, JSON.stringify(next));
+    if (supabase) {
+      supabase
+        .from('calibre_data')
+        .upsert({ id: 'main', data: next, updated_at: new Date().toISOString() })
+        .then(({ error }) => { if (error) console.warn('Supabase sync error:', error.message); });
+    }
   }, []);
+
   return [data, save, ready];
 }
 
