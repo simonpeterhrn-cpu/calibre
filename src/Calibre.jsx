@@ -243,6 +243,47 @@ export default function Calibre() {
     return () => clearInterval(tickRef.current);
   }, [running, completeSession]);
 
+  /* ---------- liquid glass ---------- */
+  const glassRefs = useRef([])
+  useEffect(() => {
+    if (typeof window.Container === 'undefined') return
+    const applied = []
+    const applyGlass = (selector, borderRadius, tintOpacity = 0.12) => {
+      document.querySelectorAll(selector).forEach(el => {
+        if (el._lg) return
+        const g = new window.Container({ type: 'rounded', borderRadius, tintOpacity })
+        Object.assign(g.element.style, {
+          position: 'absolute', inset: '0',
+          width: '100%', height: '100%',
+          zIndex: '-1', pointerEvents: 'none',
+          borderRadius: borderRadius + 'px',
+        })
+        el.prepend(g.element)
+        el._lg = g
+        requestAnimationFrame(() => g.updateSizeFromDOM?.())
+        applied.push({ el, g })
+      })
+    }
+    const t = setTimeout(() => {
+      applyGlass('.nav', 0, 0.08)
+      applyGlass('.stat', 11)
+      applyGlass('.comp', 13)
+      applyGlass('.card', 11)
+      applyGlass('.panel', 11)
+      applyGlass('.ledger', 11, 0.10)
+      glassRefs.current.push(...applied)
+    }, 80)
+    return () => {
+      clearTimeout(t)
+      applied.forEach(({ el, g }) => {
+        delete el._lg
+        try { if (g.element.parentNode === el) el.removeChild(g.element) } catch (_) {}
+        const i = window.Container.instances?.indexOf(g)
+        if (i != null && i > -1) window.Container.instances.splice(i, 1)
+      })
+    }
+  }, [tab])
+
   function skip() {
     setRunning(false);
     if (mode === "work") { cycleRef.current += 1; const long = cycleRef.current % S.cycles === 0; setMode(long ? "long" : "break"); setSecondsLeft((long ? S.longBreak : S.break) * 60); }
@@ -347,9 +388,9 @@ export default function Calibre() {
           position:relative;display:flex;overflow:hidden;min-height:100vh;
         }
         .root *{box-sizing:border-box;}
-        .nav{width:104px;background:rgba(1,10,45,0.72);backdrop-filter:blur(14px);
-          -webkit-backdrop-filter:blur(14px);border-right:1px solid var(--steel);
-          display:flex;flex-direction:column;align-items:center;padding:22px 0;gap:4px;flex-shrink:0;}
+        .nav{width:104px;background:transparent;border-right:1px solid var(--steel);
+          display:flex;flex-direction:column;align-items:center;padding:22px 0;gap:4px;flex-shrink:0;
+          position:relative;isolation:isolate;}
         .logo{font-family:'Fraunces',serif;font-weight:500;font-size:13px;letter-spacing:.24em;
           color:var(--brass);margin-bottom:26px;}
         .navbtn{width:80px;padding:11px 0;border:none;background:transparent;color:var(--slate);
@@ -378,8 +419,8 @@ export default function Calibre() {
         .focus-task{margin-top:22px;text-align:center;font-size:13px;color:var(--slate);}
         .focus-task b{color:var(--ivory);font-weight:500;}
         .stat-row{display:flex;gap:14px;justify-content:center;margin-top:26px;flex-wrap:wrap;}
-        .stat{background:var(--anthracite);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-          border:1px solid var(--steel);border-radius:11px;padding:14px 22px;text-align:center;min-width:112px;}
+        .stat{background:transparent;border:1px solid var(--steel);border-radius:11px;
+          padding:14px 22px;text-align:center;min-width:112px;position:relative;isolation:isolate;}
         .stat .num{font-family:'IBM Plex Mono',monospace;font-size:23px;color:var(--brass);}
         .stat .lbl{font-size:10px;color:var(--slate);letter-spacing:.07em;margin-top:2px;}
 
@@ -388,8 +429,8 @@ export default function Calibre() {
         .chip{background:rgba(86,225,232,0.05);border:1px solid var(--steel);color:var(--slate);
           padding:6px 13px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;}
         .chip.on{border-color:var(--brass);color:var(--brass);background:rgba(86,225,232,0.12);}
-        .ledger{background:var(--parchment);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-          border:1px solid var(--steel);border-radius:11px;overflow:hidden;color:var(--ivory);}
+        .ledger{background:transparent;border:1px solid var(--steel);border-radius:11px;
+          overflow:hidden;color:var(--ivory);position:relative;isolation:isolate;}
         .lrow{display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid rgba(86,225,232,0.08);}
         .lrow:last-child{border-bottom:none;}
         .tick{width:21px;height:21px;border-radius:5px;border:1.5px solid var(--brass-lo);cursor:pointer;
@@ -417,8 +458,8 @@ export default function Calibre() {
 
         /* habits */
         .comps{display:flex;gap:18px;flex-wrap:wrap;}
-        .comp{width:158px;background:var(--anthracite);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-          border:1px solid var(--steel);border-radius:13px;padding:16px 14px;display:flex;flex-direction:column;gap:9px;position:relative;}
+        .comp{width:158px;background:transparent;border:1px solid var(--steel);border-radius:13px;
+          padding:16px 14px;display:flex;flex-direction:column;gap:9px;position:relative;isolation:isolate;}
         .comp.on{border-color:var(--jade);}
         .comp-top{display:flex;justify-content:space-between;align-items:flex-start;}
         .comp-name{font-size:13px;font-weight:500;line-height:1.25;color:var(--ivory);}
@@ -446,12 +487,12 @@ export default function Calibre() {
 
         /* insights */
         .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:26px;}
-        .card{background:var(--anthracite);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-          border:1px solid var(--steel);border-radius:11px;padding:16px;}
+        .card{background:transparent;border:1px solid var(--steel);border-radius:11px;
+          padding:16px;position:relative;isolation:isolate;}
         .card .cn{font-family:'IBM Plex Mono',monospace;font-size:26px;color:var(--brass);}
         .card .cl{font-size:11px;color:var(--slate);letter-spacing:.05em;margin-top:3px;}
-        .panel{background:var(--anthracite);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-          border:1px solid var(--steel);border-radius:11px;padding:20px;margin-bottom:18px;}
+        .panel{background:transparent;border:1px solid var(--steel);border-radius:11px;
+          padding:20px;margin-bottom:18px;position:relative;isolation:isolate;}
         .panel h3{font-family:'Fraunces',serif;font-weight:500;font-size:15px;margin:0 0 14px;color:var(--ivory);}
         .barchart{display:flex;align-items:flex-end;gap:12px;height:120px;}
         .bc{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end;}
