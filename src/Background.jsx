@@ -2,7 +2,16 @@ import { ShaderGradientCanvas, ShaderGradient } from '@shadergradient/react'
 
 export default function Background() {
   return (
-    <ShaderGradientCanvas style={{ position: 'absolute', inset: 0 }}>
+    <ShaderGradientCanvas
+      style={{
+        position: 'fixed',
+        inset: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: -1,
+        pointerEvents: 'none',
+      }}
+    >
       <ShaderGradient
         control="props"
         type="waterPlane"

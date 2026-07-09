@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import Background from "./Background";
 
 /* ============================================================
    CALIBRE — a productivity instrument built with watchmaking
@@ -337,14 +336,13 @@ export default function Calibre() {
 
   return (
     <div className="root">
-      <Background />
       <style>{`
         ${FONTS}
         .root{
           --ink:#101317;--anthracite:#171B21;--steel:#2A2F37;--case:#C4C9D1;
           --parchment:#ECE6D8;--brass:#B08D57;--brass-lo:#8A6E43;--crimson:#A23B2E;
           --jade:#4E8D6E;--ivory:#F5F1E8;--slate:#8A9099;
-          font-family:'IBM Plex Sans',sans-serif;background:var(--ink);color:var(--ivory);
+          font-family:'IBM Plex Sans',sans-serif;background:transparent;color:var(--ivory);
           position:relative;display:flex;overflow:hidden;min-height:100vh;
         }
         .root *{box-sizing:border-box;}
