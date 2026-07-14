@@ -24,6 +24,7 @@ import { supabase } from "./supabase";
 
 const KEY = "calibre:v2";
 const TIMER_KEY = "calibre:timer:v1";
+const REMIND_KEY = "calibre:reminders:v1";
 const DAY = 86400000;
 
 /* Local calendar date (Europe/Paris etc.) — NOT UTC.
@@ -31,7 +32,7 @@ const DAY = 86400000;
 const dateStr = (ms) => new Date(ms).toLocaleDateString("sv-SE");
 const todayStr = () => dateStr(Date.now());
 
-const DEFAULT_SETTINGS = { work: 25, break: 5, longBreak: 15, cycles: 4, sound: true, targetBed: "23:00", targetWake: "07:00" };
+const DEFAULT_SETTINGS = { work: 25, break: 5, longBreak: 15, cycles: 4, sound: true, targetBed: "23:00", targetWake: "07:00", reminders: false };
 
 /* palette for user-defined projects — hues that sit well on the deep blue */
 const PROJECT_COLORS = ["#56e1e8", "#4ecdc4", "#ff6b6b", "#ffc46b", "#b98bff", "#6b9bff"];
@@ -474,6 +475,57 @@ function Scatter({ points, width = 300, height = 170, color = "var(--brass)" }) 
   );
 }
 
+/* ================= year heatmap (habits) ================= */
+function YearHeatmap({ habits }) {
+  if (habits.length === 0) return null;
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const start = new Date(today.getTime() - (today.getDay() + 52 * 7) * DAY);
+  const total = habits.length;
+  const cols = [];
+  const monthLabels = [];
+  let prevMonth = "";
+  let daysKept = 0;
+  for (let w = 0; w < 53; w++) {
+    const cells = [];
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(start.getTime() + (w * 7 + d) * DAY);
+      if (date > today) { cells.push(null); continue; }
+      const ds = dateStr(date.getTime());
+      const count = habits.reduce((a, h) => a + (h.history[ds] ? 1 : 0), 0);
+      if (count > 0) daysKept++;
+      cells.push({ ds, count });
+    }
+    const m = new Date(start.getTime() + w * 7 * DAY).toLocaleDateString("en-GB", { month: "short" });
+    monthLabels.push(m !== prevMonth ? m : "");
+    prevMonth = m;
+    cols.push(cells);
+  }
+  const LEVELS = ["rgba(86,225,232,0.08)", "rgba(78,205,196,0.28)", "rgba(78,205,196,0.5)", "rgba(78,205,196,0.75)", "#4ecdc4"];
+  const level = (count) => count === 0 ? 0 : Math.max(1, Math.round((count / total) * 4));
+  return (
+    <div className="panel" style={{ marginTop: 24 }}>
+      <h3>The year — {daysKept} {daysKept === 1 ? "day" : "days"} with at least one habit kept</h3>
+      <div className="heatwrap">
+        <div>
+          <div className="heatmonths" aria-hidden="true">
+            {monthLabels.map((m, i) => <div key={i} className="heatmonth">{m}</div>)}
+          </div>
+          <div className="heatgrid" role="img" aria-label={`Habit heatmap for the last year: ${daysKept} days with at least one habit kept`}>
+            {cols.map((cells, w) => (
+              <div className="heatcol" key={w}>
+                {cells.map((c, d) => c
+                  ? <div key={d} className="heatcell" style={{ background: LEVELS[level(c.count)] }} title={`${c.ds} · ${c.count}/${total} habits`} />
+                  : <div key={d} className="heatcell" style={{ background: "transparent" }} />)}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="setsub" style={{ marginTop: 10 }}>Each cell is a day — deeper jade, more habits kept.</div>
+    </div>
+  );
+}
+
 /* ================= App ================= */
 export default function Calibre() {
   const { data, save, session, syncState } = useStore();
@@ -634,6 +686,64 @@ export default function Calibre() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [toggleTimer]);
+
+  /* ---------- reminders: wind-down + due-task nudges --------------------
+     Fires at most once per day per kind, tracked in localStorage. Only
+     works while the app (or its tab) is open — there is no push server. */
+  const dataRef = useRef(null);
+  useEffect(() => { dataRef.current = data; }, [data]);
+  useEffect(() => {
+    if (!S.reminders) return;
+    const readFired = () => {
+      try { return JSON.parse(localStorage.getItem(REMIND_KEY)) || {}; } catch { return {}; }
+    };
+    const markFired = (kind) => {
+      const today = todayStr();
+      const prev = readFired();
+      const next = {};
+      for (const k of Object.keys(prev)) if (k.endsWith(today)) next[k] = true; // prune old days
+      next[`${kind}:${today}`] = true;
+      try { localStorage.setItem(REMIND_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    };
+    const notify = (title, body) => {
+      if (!("Notification" in window) || Notification.permission !== "granted") return false;
+      try { new Notification(title, { body, icon: "/icon-192.png" }); return true; } catch { return false; }
+    };
+    const tick = () => {
+      const d = dataRef.current;
+      if (!d) return;
+      const today = todayStr();
+      const fired = readFired();
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+
+      /* wind-down: a 30-minute window starting 30 min before target bedtime */
+      const [bh, bm] = (d.settings.targetBed || "23:00").split(":").map(Number);
+      const windMin = (bh * 60 + bm - 30 + 1440) % 1440;
+      const inWindWindow = nowMin >= windMin && nowMin < windMin + 30;
+      if (inWindWindow && !fired[`wind:${today}`]) {
+        if (notify("Wind down", `Target bedtime is ${d.settings.targetBed} — start closing the day.`)) markFired("wind");
+      }
+
+      /* due tasks: a morning nudge between 09:00 and 11:00 */
+      if (nowMin >= 9 * 60 && nowMin < 11 * 60 && !fired[`due:${today}`]) {
+        const due = d.tasks.filter((tk) => !tk.done && tk.due && tk.due <= today);
+        if (due.length > 0) {
+          if (notify(`${due.length} ${due.length === 1 ? "entry" : "entries"} due`, due.slice(0, 3).map((tk) => tk.label).join(" · "))) markFired("due");
+        }
+      }
+    };
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
+  }, [S.reminders]);
+
+  function toggleReminders() {
+    if (!S.reminders && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+    setS({ reminders: !S.reminders });
+  }
 
   /* ---------- auth form ---------- */
   const [email, setEmail] = useState("");
@@ -971,6 +1081,12 @@ export default function Calibre() {
         .comp-del{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--slate);
           cursor:pointer;font-size:14px;opacity:.5;font-family:inherit;}
         .comp-del:hover{opacity:1;color:var(--crimson);}
+        .heatwrap{overflow-x:auto;padding-bottom:6px;}
+        .heatmonths{display:flex;gap:2px;margin-bottom:5px;}
+        .heatmonth{width:9px;flex-shrink:0;font-size:8px;color:var(--slate);white-space:nowrap;overflow:visible;}
+        .heatgrid{display:flex;gap:2px;width:fit-content;}
+        .heatcol{display:flex;flex-direction:column;gap:2px;}
+        .heatcell{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
 
         /* reserve */
         .gauge-wrap{display:flex;justify-content:center;margin:6px 0 8px;}
@@ -1282,6 +1398,7 @@ export default function Calibre() {
                 onChange={(e) => setNewHabit(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addHabit()} />
               <button className="addbtn" onClick={addHabit}>Add</button>
             </div>
+            <YearHeatmap habits={data.habits} />
           </>
         )}
 
@@ -1488,6 +1605,14 @@ export default function Calibre() {
                 <div><div className="setlbl">Chime on completion</div><div className="setsub">Soft three-note signal</div></div>
                 <button className={`toggle ${S.sound ? "on" : ""}`} onClick={() => setS({ sound: !S.sound })}
                   role="switch" aria-checked={S.sound} aria-label="Chime on completion" />
+              </div>
+              <div className="setrow">
+                <div>
+                  <div className="setlbl">Reminders</div>
+                  <div className="setsub">Wind-down 30 min before target bedtime · due-entry nudge in the morning. Works while the app is open.</div>
+                </div>
+                <button className={`toggle ${S.reminders ? "on" : ""}`} onClick={toggleReminders}
+                  role="switch" aria-checked={S.reminders} aria-label="Reminders" />
               </div>
             </div>
 
