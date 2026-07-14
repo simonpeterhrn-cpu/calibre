@@ -394,44 +394,64 @@ const NAV = [
 ];
 
 /* ======================= DIAL ======================= */
-function Dial({ mode, secondsLeft, total, running, onToggle, onReset, onSkip }) {
+/* Composition borrowed from minimalist pairing dials (Wove): a large
+   arc bleeding off the left edge, ghost numerals marking each session
+   of the cycle along it, and the remaining time set huge beside the
+   arc with a quiet label underneath. */
+function Dial({ mode, secondsLeft, total, running, cycle, cycles, taskLabel, onToggle, onReset, onSkip }) {
   const pct = total ? 1 - secondsLeft / total : 0;
-  const angle = pct * 360;
-  const cx = 130, cy = 130, R = 108;
-  const hx = cx + R * Math.sin((angle * Math.PI) / 180);
-  const hy = cy - R * Math.cos((angle * Math.PI) / 180);
-  const large = angle > 180 ? 1 : 0;
-  const arc = angle > 0.1 ? `M ${cx} ${cy - R} A ${R} ${R} 0 ${large} 1 ${hx} ${hy}` : "";
   const mm = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
   const ss = String(secondsLeft % 60).padStart(2, "0");
   const accent = mode === "work" ? "var(--crimson)" : "var(--jade)";
+  const cx = 20, cy = 230, r = 200;
+  const rad = (deg) => (deg * Math.PI) / 180;
+  const at = (deg, radius = r) => [cx + radius * Math.cos(rad(deg)), cy + radius * Math.sin(rad(deg))];
 
-  const ticks = [];
-  for (let i = 0; i < 60; i++) {
-    const a = (i * 6 * Math.PI) / 180;
-    const major = i % 5 === 0;
-    const rO = 118, rI = major ? 106 : 112;
-    ticks.push(
-      <line key={i}
-        x1={cx + rO * Math.sin(a)} y1={cy - rO * Math.cos(a)}
-        x2={cx + rI * Math.sin(a)} y2={cy - rI * Math.cos(a)}
-        stroke={major ? "var(--brass)" : "var(--steel)"}
-        strokeWidth={major ? 2 : 1} opacity={major ? 0.85 : 0.5} />
+  /* progress runs down the visible right-hand arc, top → bottom */
+  const theta = -90 + pct * 180;
+  const [px, py] = at(theta);
+  const [sx, sy] = at(-90);
+  const arc = pct > 0.002 ? `M ${sx} ${sy} A ${r} ${r} 0 0 1 ${px} ${py}` : "";
+
+  /* one ghost numeral + dot per session in the cycle, tangent-rotated */
+  const pos = cycle % cycles;
+  const ghosts = [];
+  for (let i = 0; i < cycles; i++) {
+    const a = cycles === 1 ? 0 : -58 + (116 / (cycles - 1)) * i;
+    const [gx, gy] = at(a, r + 42);
+    const [dx, dy] = at(a);
+    const isNow = i === pos;
+    const isPast = i < pos;
+    ghosts.push(
+      <g key={i}>
+        <circle cx={dx} cy={dy} r={isNow ? 4 : 2.5}
+          fill={isNow ? accent : isPast ? "var(--brass)" : "var(--steel)"} opacity={isNow ? 1 : 0.85} />
+        <text x={gx} y={gy} transform={`rotate(${a} ${gx} ${gy})`}
+          textAnchor="middle" dominantBaseline="central" className="dial-ghost"
+          style={{ opacity: isNow ? 0.95 : isPast ? 0.4 : 0.16, fill: isNow ? "var(--brass)" : "var(--ivory)" }}>
+          {String(i + 1).padStart(2, "0")}
+        </text>
+      </g>
     );
   }
+
   const label = mode === "work" ? "SESSION" : mode === "break" ? "SHORT REST" : "LONG REST";
+  const desc = mode === "work"
+    ? (taskLabel ? (taskLabel.length > 36 ? taskLabel.slice(0, 35) + "…" : taskLabel) : "one movement at a time.")
+    : "let the mechanism breathe.";
 
   return (
     <div className="dial">
-      <svg viewBox="0 0 260 260" className="dial-svg" role="timer" aria-label={`${label}: ${mm} minutes ${ss} seconds remaining`}>
-        <circle cx={cx} cy={cy} r="127" fill="var(--anthracite)" stroke="var(--steel)" strokeWidth="1.5" />
-        <circle cx={cx} cy={cy} r="118" fill="none" stroke="var(--steel)" strokeWidth="0.5" opacity="0.5" />
-        {ticks}
-        {arc && <path d={arc} fill="none" stroke={accent} strokeWidth="3.5" strokeLinecap="round" opacity="0.9" />}
-        <line x1={cx} y1={cy} x2={hx} y2={hy} stroke="var(--brass)" strokeWidth="2.5" strokeLinecap="round" />
-        <circle cx={cx} cy={cy} r="4.5" fill="var(--brass)" />
-        <text x={cx} y={cy - 34} textAnchor="middle" className="dial-cap">{label}</text>
-        <text x={cx} y={cy + 8} textAnchor="middle" className="dial-time">{mm}:{ss}</text>
+      <svg viewBox="0 0 700 460" className="dial-svg" role="timer" aria-label={`${label}: ${mm} minutes ${ss} seconds remaining`}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--steel)" strokeWidth="1.5" />
+        {arc && <path d={arc} fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" opacity="0.9" />}
+        {ghosts}
+        <circle cx={px} cy={py} r="6" fill={accent} />
+        <text x={300} y={250} className="dial-big">{mm}:{ss}</text>
+        <text x={305} y={290} className="dial-mode" style={{ fill: accent }}>
+          {label} · {String(pos + 1).padStart(2, "0")} OF {String(cycles).padStart(2, "0")}
+        </text>
+        <text x={305} y={315} className="dial-desc">{desc}</text>
       </svg>
       <div className="dial-ctrl">
         <button className="crown" onClick={onToggle}>{running ? "Pause" : "Wind"}</button>
@@ -1004,10 +1024,12 @@ export default function Calibre() {
         .mono{font-family:'IBM Plex Mono',monospace;}
 
         /* focus */
-        .dial{display:flex;flex-direction:column;align-items:center;gap:18px;}
-        .dial-svg{width:300px;height:300px;max-width:80vw;}
-        .dial-cap{font-family:'IBM Plex Mono',monospace;font-size:10px;fill:var(--slate);letter-spacing:.16em;}
-        .dial-time{font-family:'IBM Plex Mono',monospace;font-size:40px;fill:var(--ivory);letter-spacing:.04em;}
+        .dial{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;}
+        .dial-svg{width:100%;max-width:640px;height:auto;display:block;}
+        .dial-ghost{font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600;letter-spacing:.05em;}
+        .dial-big{font-family:'IBM Plex Mono',monospace;font-size:82px;fill:var(--ivory);letter-spacing:.01em;}
+        .dial-mode{font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:.18em;}
+        .dial-desc{font-family:'IBM Plex Sans',sans-serif;font-size:14.5px;fill:var(--slate);}
         .dial-ctrl{display:flex;gap:10px;}
         .crown{background:var(--brass);color:#020d2e;border:none;padding:11px 30px;border-radius:22px;
           font-weight:600;font-size:13px;cursor:pointer;letter-spacing:.03em;font-family:inherit;}
@@ -1147,7 +1169,7 @@ export default function Calibre() {
         .authmsg{font-size:12px;color:var(--slate);margin-top:10px;}
 
         /* today */
-        .today-grid{display:grid;grid-template-columns:minmax(300px,370px) minmax(0,1fr);gap:32px;align-items:start;}
+        .today-grid{display:grid;grid-template-columns:minmax(340px,1.15fr) minmax(0,1fr);gap:32px;align-items:start;}
         .today-side .panel{margin-bottom:14px;}
         .drow{display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid rgba(86,225,232,0.07);}
         .drow:last-child{border-bottom:none;}
@@ -1180,7 +1202,6 @@ export default function Calibre() {
           .navbtn .ic{font-size:17px;}
           .main{padding:22px 16px 100px;max-height:none;}
           .h1{font-size:23px;}
-          .dial-svg{width:240px;height:240px;}
           .comp{width:calc(50% - 9px);}
           .stat{min-width:96px;padding:12px 14px;}
           .today-grid{grid-template-columns:1fr;gap:22px;}
@@ -1207,6 +1228,8 @@ export default function Calibre() {
             <div className="today-grid">
               <div>
                 <Dial mode={timer.mode} secondsLeft={secondsLeft} total={total} running={timer.running}
+                  cycle={timer.cycle} cycles={S.cycles}
+                  taskLabel={data.tasks.find((x) => x.id === activeTask)?.label || null}
                   onToggle={toggleTimer} onReset={resetTimer} onSkip={skip} />
                 <div className="focus-task">
                   {activeTask
