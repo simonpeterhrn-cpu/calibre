@@ -49,6 +49,7 @@ const emptyData = () => ({
   settings: { ...DEFAULT_SETTINGS },
   notes: "",
   projects: DEFAULT_PROJECTS.map((p) => ({ ...p })),
+  programDone: {}, // program item id -> true
 });
 
 /* bring data written by older versions of the app up to the current shape */
@@ -59,6 +60,7 @@ function migrate(d) {
   if (!Array.isArray(out.projects) || out.projects.length === 0) {
     out.projects = DEFAULT_PROJECTS.map((p) => ({ ...p }));
   }
+  if (!out.programDone || typeof out.programDone !== "object") out.programDone = {};
   /* sleepLog used to be date -> hours (a plain number); now it's
      date -> {bed, wake, hours} so bedtime/wake-time can be logged too */
   const norm = {};
@@ -386,11 +388,95 @@ const fmtDue = (ds) => {
 
 const NAV = [
   { id: "today", label: "Today", icon: "◎" },
+  { id: "program", label: "Programme", icon: "✦" },
   { id: "tasks", label: "Manifest", icon: "≣" },
   { id: "habits", label: "Habits", icon: "⊙" },
   { id: "reserve", label: "Reserve", icon: "◐" },
   { id: "insights", label: "Insights", icon: "◭" },
   { id: "regulator", label: "Regulator", icon: "⚙" },
+];
+
+/* ============== PROGRAMME — MPSI Janson → MP* → concours 2028 ==============
+   Two-year roadmap. Item ids are stable: checked state lives in
+   data.programDone and syncs like everything else. */
+const ECRITS_2028 = "2028-04-17"; // ≈ start of the écrits (X / Centrale window)
+const DRIVE_URL = "https://drive.google.com/drive/folders/1iKNEdPotIdQS13Adu0zUHkFUPV9JWkYX?usp=drive_link";
+const PROGRAM = [
+  {
+    id: "p0", title: "Été 2026 — la rampe de lancement", period: ["2026-07-01", "2026-08-31"],
+    focus: "Arriver le 1er septembre avec les automatismes déjà en place. 3–4 h de maths par jour, régulières, plutôt que des journées héroïques.",
+    items: [
+      { id: "p0-llg", label: "Terminer le poly de Louis-le-Grand (transition lycée → MPSI), en rédigeant chaque exercice" },
+      { id: "p0-auto", label: "Automatismes parfaits : dérivées, primitives usuelles, trigonométrie, inégalités classiques — sans hésiter" },
+      { id: "p0-book", label: "Ellipses MPSI : logique & ensembles, calculs algébriques, nombres complexes (cours résumé + exos-minutes)" },
+      { id: "p0-drive", label: "Organiser le Drive : un dossier par chapitre (polys, DS, fiches), pour tout retrouver en 10 secondes" },
+      { id: "p0-sleep", label: "Caler le sommeil sur le rythme prépa (23 h – 7 h) deux semaines avant la rentrée" },
+    ],
+  },
+  {
+    id: "p1", title: "MPSI, semestre 1 — installer la machine", period: ["2026-09-01", "2027-01-31"],
+    focus: "Le classement pour MP* se joue dès maintenant. La règle d'or : aucun point de cours ne reste flou plus de 48 h.",
+    items: [
+      { id: "p1-fiche", label: "Relire et refaire le cours le soir même ; une fiche (théorèmes + méthodes) par chapitre" },
+      { id: "p1-kholle", label: "Avant chaque khôlle de maths : Vrai/Faux et erreurs classiques du chapitre dans l'Ellipses" },
+      { id: "p1-ds", label: "Chaque week-end : un problème type DS en temps limité, rédigé comme au concours" },
+      { id: "p1-core", label: "Chapitres cœur maîtrisés : complexes, suites, limites/continuité, dérivabilité, équations différentielles, polynômes, arithmétique" },
+      { id: "p1-rank", label: "Objectif classement : top 10 de la classe aux DS de maths et physique" },
+      { id: "p1-ask", label: "Poser chaque point flou au prof ou en khôlle — la question ne coûte rien, la lacune coûte le concours" },
+    ],
+  },
+  {
+    id: "p2", title: "MPSI, semestre 2 — sécuriser l'étoile", period: ["2027-02-01", "2027-06-30"],
+    focus: "L'algèbre linéaire est LE juge de paix de la MPSI. La décision MP* tombe en juin sur le classement de l'année.",
+    items: [
+      { id: "p2-algebra", label: "Algèbre linéaire à fond : espaces vectoriels, dimension finie, matrices, déterminants — refaits trois fois plutôt qu'une" },
+      { id: "p2-analysis", label: "Analyse : développements limités, intégration sur un segment, séries numériques (début)" },
+      { id: "p2-proba", label: "Probabilités finies + espaces préhilbertiens : ne pas les sacrifier, ils tombent aux concours" },
+      { id: "p2-concours", label: "Sur chaque chapitre terminé : les sujets de concours (écrits, oraux) de l'Ellipses" },
+      { id: "p2-rank", label: "Tenir le classement (top 10) jusqu'aux conseils de juin — c'est le dossier MP*" },
+      { id: "p2-mpstar", label: "Obtenir la MP* de Janson ✦" },
+    ],
+  },
+  {
+    id: "p3", title: "Été 2027 — consolider avant l'assaut", period: ["2027-07-01", "2027-08-31"],
+    focus: "Deux vraies semaines de repos, puis révision complète. En MP*, tout va deux fois plus vite : l'avance prise ici est décisive.",
+    items: [
+      { id: "p3-rest", label: "Deux semaines de vraie coupure — le cerveau consolide pendant le repos" },
+      { id: "p3-review", label: "Révision complète MPSI par les fiches ; refaire intégralement les DS ratés de l'année" },
+      { id: "p3-ahead", label: "Prendre de l'avance sur le programme MP : séries, intégrales généralisées, réduction des endomorphismes" },
+      { id: "p3-tipe", label: "Choisir le sujet de TIPE et faire la première bibliographie" },
+    ],
+  },
+  {
+    id: "p4", title: "MP* — l'année du concours commence", period: ["2027-09-01", "2027-12-31"],
+    focus: "Niveau X/ENS aux khôlles, rythme concours aux écrits. Le TIPE avance chaque semaine, pas « plus tard ».",
+    items: [
+      { id: "p4-subject", label: "Un sujet de concours (Centrale ou Mines) par semaine, en temps limité, rédigé" },
+      { id: "p4-kholle", label: "Khôlles préparées au niveau X/ENS : planches classiques refaites jusqu'à fluidité" },
+      { id: "p4-fiches", label: "Fiches méthodes transversales : « comment on attaque » chaque grand type de problème" },
+      { id: "p4-tipe", label: "TIPE : expériences/résultats concrets avant décembre" },
+    ],
+  },
+  {
+    id: "p5", title: "Janvier – avril 2028 — révisions & écrits", period: ["2028-01-01", "2028-04-30"],
+    focus: "Rotation systématique des thèmes, annales en conditions réelles. Les écrits se gagnent sur la régularité de la rédaction.",
+    items: [
+      { id: "p5-rotate", label: "Planning de révision en rotation : chaque thème revu au moins deux fois avant avril" },
+      { id: "p5-annales", label: "Annales X-ENS, Centrale, Mines en conditions (durée réelle, sans notes)" },
+      { id: "p5-blancs", label: "Deux sujets blancs par semaine, corrigés à fond : chaque point perdu est compris" },
+      { id: "p5-ecrits", label: "Écrits 2028 ✦ — arriver reposé : les derniers jours, on dort, on ne bachote plus" },
+    ],
+  },
+  {
+    id: "p6", title: "Mai – juillet 2028 — les oraux", period: ["2028-05-01", "2028-07-31"],
+    focus: "L'oral est un sport : une planche par jour, à voix haute, au tableau. C'est ici que l'X et CentraleSupélec se départagent.",
+    items: [
+      { id: "p6-planches", label: "Une planche d'oral par jour (X, CS) : parler en travaillant, gérer le tableau" },
+      { id: "p6-ads", label: "Préparer l'ADS et l'oral de TIPE : exposé rodé, questions anticipées" },
+      { id: "p6-pace", label: "Après les admissibilités : caler les cadences sur les écoles obtenues" },
+      { id: "p6-goal", label: "Intégrer l'X ou CentraleSupélec ✦✦" },
+    ],
+  },
 ];
 
 /* ======================= DIAL ======================= */
@@ -695,7 +781,7 @@ export default function Calibre() {
       if (e.key === " ") {
         e.preventDefault();
         toggleTimer();
-      } else if (e.key >= "1" && e.key <= "6") {
+      } else if (e.key >= "1" && e.key <= "7") {
         setTab(NAV[+e.key - 1].id);
       } else if (e.key === "n" || e.key === "N") {
         e.preventDefault();
@@ -827,6 +913,28 @@ export default function Calibre() {
     showUndo(`Removed project "${name}"`, data);
     save({ ...data, projects: data.projects.filter((p) => p.name !== name) });
     if (filter === name) setFilter("all");
+  }
+
+  /* ---------- programme ---------- */
+  function toggleProgramItem(id) {
+    save({ ...data, programDone: { ...data.programDone, [id]: !data.programDone[id] } });
+  }
+  /* seed the prépa working rhythm: projects + daily habits (additive) */
+  function adoptRhythm() {
+    const wantProjects = [
+      { name: "Maths", color: "#56e1e8" }, { name: "Physique", color: "#b98bff" },
+      { name: "Khôlles", color: "#ff6b6b" }, { name: "TIPE", color: "#ffc46b" },
+    ];
+    const wantHabits = ["Exos-minutes (10 min de calcul)", "Fiche du soir (cours du jour)", "Anglais — 15 min"];
+    const newProjects = wantProjects.filter((w) => !data.projects.some((p) => p.name.toLowerCase() === w.name.toLowerCase()));
+    const newHabits = wantHabits.filter((w) => !data.habits.some((h) => h.name.toLowerCase() === w.toLowerCase()));
+    if (newProjects.length === 0 && newHabits.length === 0) return;
+    showUndo("Rythme prépa adopté — projets et habitudes ajoutés", data);
+    save({
+      ...data,
+      projects: [...data.projects, ...newProjects],
+      habits: [...data.habits, ...newHabits.map((name, i) => ({ id: "h" + (Date.now() + i), name, best: 0, history: {} }))],
+    });
   }
 
   /* ---------- backup ---------- */
@@ -985,6 +1093,14 @@ export default function Calibre() {
   const targetHours = sleepHours(S.targetBed, S.targetWake) ?? 8;
   const todayLog = data.sleepLog[t] || null;
   const bedDelta = todayLog?.bed ? timeDeltaMin(todayLog.bed, S.targetBed) : null;
+
+  /* programme: which phase are we in, what's the next unchecked step */
+  const phaseStatus = (p) => (t > p.period[1] ? "done" : t >= p.period[0] ? "current" : "upcoming");
+  const currentPhase = PROGRAM.find((p) => phaseStatus(p) === "current")
+    || PROGRAM.find((p) => phaseStatus(p) === "upcoming")
+    || PROGRAM[PROGRAM.length - 1];
+  const nextProgramItem = currentPhase.items.find((it) => !data.programDone[it.id]) || null;
+  const daysToEcrits = Math.max(0, Math.ceil((new Date(ECRITS_2028 + "T09:00:00") - Date.now()) / DAY));
 
   const SYNC = {
     local: { color: "var(--slate)", label: "Local only — data stays in this browser" },
@@ -1168,6 +1284,13 @@ export default function Calibre() {
         .empty{padding:30px;text-align:center;color:var(--slate);font-size:13px;}
         .authmsg{font-size:12px;color:var(--slate);margin-top:10px;}
 
+        /* programme */
+        .phase-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+        .phase-chip{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:.14em;
+          padding:3px 9px;border-radius:10px;border:1px solid var(--steel);color:var(--slate);}
+        .phase-chip.current{border-color:var(--brass);color:var(--brass);background:rgba(86,225,232,0.1);}
+        .phase-chip.done{border-color:var(--jade);color:var(--jade);}
+
         /* today */
         .today-grid{display:grid;grid-template-columns:minmax(340px,1.15fr) minmax(0,1fr);gap:32px;align-items:start;}
         .today-side .panel{margin-bottom:14px;}
@@ -1243,6 +1366,19 @@ export default function Calibre() {
                 </div>
               </div>
               <div className="today-side">
+                <div className="panel" style={{ borderColor: "rgba(86,225,232,0.3)" }}>
+                  <h3>Programme · {currentPhase.title.split("—")[0].trim()}</h3>
+                  {nextProgramItem ? (
+                    <div className="drow">
+                      <button className="tick" onClick={() => toggleProgramItem(nextProgramItem.id)}
+                        role="checkbox" aria-checked={false} aria-label={`Marquer « ${nextProgramItem.label} »`} />
+                      <div className="llabel" style={{ fontSize: 13, flex: 1 }}>{nextProgramItem.label}</div>
+                      <button className="laction" onClick={() => setTab("program")}>tout voir</button>
+                    </div>
+                  ) : (
+                    <div className="setsub">Phase bouclée ✦ — <button className="laction" style={{ padding: 0 }} onClick={() => setTab("program")}>voir la suite</button></div>
+                  )}
+                </div>
                 <div className="panel">
                   <h3>On the docket</h3>
                   {docket.length === 0 && (
@@ -1307,6 +1443,81 @@ export default function Calibre() {
                 </div>
               </div>
             </div>
+          </>
+        )}
+
+        {/* PROGRAMME */}
+        {tab === "program" && (
+          <>
+            <h1 className="h1">Programme</h1>
+            <p className="sub">MPSI Janson de Sailly → MP✦ → l'X ou CentraleSupélec. Concours 2028.</p>
+
+            <div className="cards" style={{ maxWidth: 720 }}>
+              <div className="card"><div className="cn">{daysToEcrits}</div><div className="cl">JOURS AVANT LES ÉCRITS</div></div>
+              <div className="card">
+                <div className="cn">{PROGRAM.reduce((a, p) => a + p.items.filter((it) => data.programDone[it.id]).length, 0)}<span style={{ fontSize: 15, color: "var(--slate)" }}> / {PROGRAM.reduce((a, p) => a + p.items.length, 0)}</span></div>
+                <div className="cl">JALONS FRANCHIS</div>
+              </div>
+              <div className="card">
+                <div className="cn" style={{ fontSize: 16, lineHeight: 1.3, paddingTop: 6 }}>{currentPhase.title.split("—")[0].trim()}</div>
+                <div className="cl">PHASE EN COURS</div>
+              </div>
+            </div>
+
+            <div className="panel">
+              <h3>Arsenal</h3>
+              <div className="drow">
+                <div className="lbody">
+                  <div className="llabel" style={{ fontSize: 13 }}>Ellipses — Maths MPSI/MP2I, 6ᵉ édition (Prépas Sciences)</div>
+                  <div className="setsub">Par chapitre : cours résumé → méthodes → Vrai/Faux → exos. Les « exos-minutes » chaque matin.</div>
+                </div>
+              </div>
+              <div className="drow">
+                <div className="lbody">
+                  <div className="llabel" style={{ fontSize: 13 }}><a href={DRIVE_URL} target="_blank" rel="noreferrer" style={{ color: "var(--brass)" }}>Le Drive de prépa ↗</a></div>
+                  <div className="setsub">Polys, DS et fiches — un dossier par chapitre, rangé le jour même.</div>
+                </div>
+              </div>
+              <div className="drow">
+                <div className="lbody">
+                  <div className="llabel" style={{ fontSize: 13 }}>Poly de Louis-le-Grand</div>
+                  <div className="setsub">Le poly de transition lycée → MPSI. C'est le travail de cet été — chaque exercice rédigé au propre.</div>
+                </div>
+              </div>
+              <button className="quiet" onClick={adoptRhythm}>Adopter le rythme prépa (projets + habitudes)</button>
+            </div>
+
+            {PROGRAM.map((p) => {
+              const st = phaseStatus(p);
+              const done = p.items.filter((it) => data.programDone[it.id]).length;
+              return (
+                <div className="panel" key={p.id} style={{ opacity: st === "done" ? 0.65 : 1, borderColor: st === "current" ? "rgba(86,225,232,0.45)" : undefined }}>
+                  <div className="phase-head">
+                    <h3 style={{ margin: 0 }}>{p.title}</h3>
+                    <span className={`phase-chip ${st}`}>{st === "done" ? "FAIT" : st === "current" ? "EN COURS" : "À VENIR"}</span>
+                    <span className="esttag" style={{ marginLeft: "auto" }}>{done}/{p.items.length}</span>
+                  </div>
+                  <div className="setsub" style={{ margin: "6px 0 12px" }}>
+                    {p.period.map((ds) => {
+                      const [y, m, d] = ds.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+                    }).join(" → ")} · {p.focus}
+                  </div>
+                  {p.items.map((it) => {
+                    const isDone = !!data.programDone[it.id];
+                    return (
+                      <div className="drow" key={it.id}>
+                        <button className={`tick ${isDone ? "on" : ""}`} onClick={() => toggleProgramItem(it.id)}
+                          role="checkbox" aria-checked={isDone} aria-label={`Marquer « ${it.label} »`}>
+                          {isDone ? "✓" : ""}
+                        </button>
+                        <div className={`llabel ${isDone ? "done" : ""}`} style={{ fontSize: 13, flex: 1 }}>{it.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </>
         )}
 
@@ -1710,7 +1921,7 @@ export default function Calibre() {
             <div className="panel">
               <h3>Shortcuts</h3>
               <div className="setsub">
-                <span className="kbd">Space</span> wind / pause · <span className="kbd">1–6</span> switch tabs · <span className="kbd">N</span> new entry
+                <span className="kbd">Space</span> wind / pause · <span className="kbd">1–7</span> switch tabs · <span className="kbd">N</span> new entry
               </div>
             </div>
 
