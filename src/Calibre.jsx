@@ -32,7 +32,7 @@ const DAY = 86400000;
 const dateStr = (ms) => new Date(ms).toLocaleDateString("sv-SE");
 const todayStr = () => dateStr(Date.now());
 
-const DEFAULT_SETTINGS = { work: 25, break: 5, longBreak: 15, cycles: 4, sound: true, targetBed: "23:00", targetWake: "07:00", reminders: false };
+const DEFAULT_SETTINGS = { work: 25, break: 5, longBreak: 15, cycles: 4, sound: true, targetBed: "23:00", targetWake: "07:00", reminders: false, theme: "nuit" };
 
 /* palette for user-defined projects — hues that sit well on the deep blue */
 const PROJECT_COLORS = ["#56e1e8", "#4ecdc4", "#ff6b6b", "#ffc46b", "#b98bff", "#6b9bff"];
@@ -672,7 +672,7 @@ function YearHeatmap({ habits }) {
     prevMonth = m;
     cols.push(cells);
   }
-  const LEVELS = ["rgba(86,225,232,0.08)", "rgba(78,205,196,0.28)", "rgba(78,205,196,0.5)", "rgba(78,205,196,0.75)", "#4ecdc4"];
+  const LEVELS = ["var(--heat0)", "var(--heat1)", "var(--heat2)", "var(--heat3)", "var(--heat4)"];
   const level = (count) => count === 0 ? 0 : Math.max(1, Math.round((count / total) * 4));
   return (
     <div className="panel" style={{ marginTop: 24 }}>
@@ -909,6 +909,14 @@ export default function Calibre() {
     const id = setInterval(tick, 30000);
     return () => clearInterval(id);
   }, [S.reminders]);
+
+  /* apply theme to the page chrome (backdrop + browser UI color) */
+  useEffect(() => {
+    const theme = S.theme === "ciel" ? "ciel" : "nuit";
+    document.body.dataset.calTheme = theme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = theme === "ciel" ? "#cfe2f1" : "#020d2e";
+  }, [S.theme]);
 
   function toggleReminders() {
     if (!S.reminders && "Notification" in window && Notification.permission === "default") {
@@ -1181,18 +1189,50 @@ export default function Calibre() {
   }[syncState];
 
   return (
-    <div className="root">
+    <div className={`root ${S.theme === "ciel" ? "t-ciel" : "t-nuit"}`}>
       <style>{`
         .root{
-          --brass:#56e1e8;--brass-lo:#2ab8c0;
-          --anthracite:rgba(2,18,70,0.58);--steel:rgba(86,225,232,0.18);
-          --case:rgba(86,225,232,0.75);--parchment:rgba(5,25,80,0.55);
-          --crimson:#ff6b6b;--jade:#4ecdc4;--ivory:#e8f4ff;--slate:#6fa8c8;
           font-family:'IBM Plex Sans',sans-serif;background:transparent;color:var(--ivory);
           position:relative;z-index:1;display:flex;min-height:100dvh;
         }
+        /* ---- thème Nuit (défaut) ---- */
+        .root.t-nuit{
+          --brass:#56e1e8;--brass-lo:#2ab8c0;--on-accent:#020d2e;
+          --anthracite:rgba(2,18,70,0.58);--steel:rgba(86,225,232,0.18);--steel-strong:rgba(86,225,232,0.4);
+          --case:rgba(86,225,232,0.75);
+          --crimson:#ff6b6b;--jade:#4ecdc4;--ivory:#e8f4ff;--slate:#6fa8c8;
+          --surface:rgba(2,12,50,0.55);--surface-2:rgba(2,18,70,0.65);
+          --nav-bg:rgba(2,10,42,0.72);--main-bg:rgba(2,10,42,0.35);
+          --row-line:rgba(86,225,232,0.08);--toast-bg:rgba(2,14,56,0.94);--opt-bg:#021242;
+          --tint-a:var(--tint-a);--tint-b:var(--tint-b);--tint-c:var(--tint-c);
+          --heat0:rgba(86,225,232,0.08);--heat1:rgba(78,205,196,0.28);--heat2:rgba(78,205,196,0.5);
+          --heat3:rgba(78,205,196,0.75);--heat4:#4ecdc4;
+          --shadow:none;
+        }
+        /* ---- thème Ciel (clair) ---- */
+        .root.t-ciel{
+          --brass:#0879a8;--brass-lo:#065f85;--on-accent:#ffffff;
+          --anthracite:rgba(240,248,253,0.66);--steel:rgba(9,66,105,0.18);--steel-strong:rgba(8,121,168,0.4);
+          --case:rgba(7,80,120,0.75);
+          --crimson:#d4494e;--jade:#0e8a74;--ivory:#0d2b45;--slate:#48688a;
+          --surface:rgba(244,250,254,0.78);--surface-2:rgba(255,255,255,0.88);
+          --nav-bg:rgba(235,245,252,0.82);--main-bg:rgba(230,242,250,0.42);
+          --row-line:rgba(9,66,105,0.1);--toast-bg:rgba(244,250,254,0.97);--opt-bg:#eaf4fb;
+          --tint-a:rgba(8,121,168,0.08);--tint-b:rgba(8,121,168,0.14);--tint-c:rgba(8,121,168,0.25);
+          --heat0:rgba(9,66,105,0.08);--heat1:rgba(14,138,116,0.25);--heat2:rgba(14,138,116,0.45);
+          --heat3:rgba(14,138,116,0.7);--heat4:#0e8a74;
+          --shadow:0 2px 14px rgba(10,50,90,0.08);
+        }
+        /* fond de page selon le thème (éléments hors .root) */
+        body[data-cal-theme="ciel"] .cal-gradient{display:none;}
+        body[data-cal-theme="ciel"] .cal-backdrop{
+          background:
+            radial-gradient(120% 90% at 80% 5%, #bcd8ee 0%, rgba(188,216,238,0) 60%),
+            radial-gradient(100% 80% at 10% 90%, #a9cce6 0%, rgba(169,204,230,0) 55%),
+            linear-gradient(160deg, #cfe2f1 0%, #bed7ea 60%, #b4d2e9 100%) !important;
+        }
         .root *{box-sizing:border-box;}
-        .nav{width:104px;background:rgba(2,10,42,0.72);backdrop-filter:blur(22px);
+        .nav{width:104px;background:var(--nav-bg);backdrop-filter:blur(22px);
           -webkit-backdrop-filter:blur(22px);border-right:1px solid var(--steel);
           display:flex;flex-direction:column;align-items:center;padding:22px 0;gap:4px;flex-shrink:0;}
         .logo{font-family:'Fraunces',serif;font-weight:500;font-size:13px;letter-spacing:.24em;
@@ -1201,11 +1241,11 @@ export default function Calibre() {
           font-size:11px;letter-spacing:.04em;cursor:pointer;display:flex;flex-direction:column;
           align-items:center;gap:5px;border-radius:9px;transition:.18s;font-family:inherit;}
         .navbtn .ic{font-size:19px;line-height:1;}
-        .navbtn:hover{color:var(--ivory);background:rgba(86,225,232,0.07);}
-        .navbtn.on{color:var(--brass);background:rgba(86,225,232,0.12);}
+        .navbtn:hover{color:var(--ivory);background:var(--tint-a);}
+        .navbtn.on{color:var(--brass);background:var(--tint-b);}
         .syncdot{margin-top:auto;width:9px;height:9px;border-radius:50%;flex-shrink:0;}
         .main{flex:1;padding:32px 40px;overflow-y:auto;max-height:100dvh;
-          background:rgba(2,10,42,0.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+          background:var(--main-bg);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
         .h1{font-family:'Fraunces',serif;font-weight:500;font-size:27px;margin:0 0 3px;letter-spacing:.01em;color:var(--ivory);}
         .sub{color:var(--slate);font-size:13px;margin:0 0 26px;}
         .mono{font-family:'IBM Plex Mono',monospace;}
@@ -1218,16 +1258,16 @@ export default function Calibre() {
         .dial-mode{font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:.18em;}
         .dial-desc{font-family:'IBM Plex Sans',sans-serif;font-size:14.5px;fill:var(--slate);}
         .dial-ctrl{display:flex;gap:10px;}
-        .crown{background:var(--brass);color:#020d2e;border:none;padding:11px 30px;border-radius:22px;
+        .crown{background:var(--brass);color:var(--on-accent);border:none;padding:11px 30px;border-radius:22px;
           font-weight:600;font-size:13px;cursor:pointer;letter-spacing:.03em;font-family:inherit;}
         .crown:active{background:var(--brass-lo);}
-        .ghost{background:rgba(86,225,232,0.06);border:1px solid var(--steel);color:var(--case);padding:11px 20px;
+        .ghost{background:var(--tint-a);border:1px solid var(--steel);color:var(--case);padding:11px 20px;
           border-radius:22px;font-size:13px;cursor:pointer;font-family:inherit;}
-        .ghost:hover{border-color:var(--brass);background:rgba(86,225,232,0.1);}
+        .ghost:hover{border-color:var(--brass);background:var(--tint-b);}
         .focus-task{margin-top:22px;text-align:center;font-size:13px;color:var(--slate);}
         .focus-task b{color:var(--ivory);font-weight:500;}
         .stat-row{display:flex;gap:14px;justify-content:center;margin-top:26px;flex-wrap:wrap;}
-        .stat{background:rgba(2,12,50,0.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+        .stat{background:var(--surface);box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
           border:1px solid var(--steel);border-radius:11px;
           padding:14px 22px;text-align:center;min-width:112px;}
         .stat .num{font-family:'IBM Plex Mono',monospace;font-size:23px;color:var(--brass);}
@@ -1235,17 +1275,17 @@ export default function Calibre() {
 
         /* tasks */
         .toolbar{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px;}
-        .chip{background:rgba(86,225,232,0.05);border:1px solid var(--steel);color:var(--slate);
+        .chip{background:var(--tint-a);border:1px solid var(--steel);color:var(--slate);
           padding:6px 13px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;}
-        .chip.on{border-color:var(--brass);color:var(--brass);background:rgba(86,225,232,0.12);}
-        .ledger{background:rgba(2,12,50,0.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+        .chip.on{border-color:var(--brass);color:var(--brass);background:var(--tint-b);}
+        .ledger{background:var(--surface);box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
           border:1px solid var(--steel);border-radius:11px;overflow:hidden;color:var(--ivory);}
-        .lrow{display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid rgba(86,225,232,0.08);}
+        .lrow{display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid var(--row-line);}
         .lrow:last-child{border-bottom:none;}
         .tick{width:21px;height:21px;border-radius:5px;border:1.5px solid var(--brass-lo);cursor:pointer;
           display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--brass-lo);flex-shrink:0;
           background:transparent;padding:0;font-family:inherit;}
-        .tick.on{background:var(--brass-lo);color:#020d2e;}
+        .tick.on{background:var(--brass-lo);color:var(--on-accent);}
         .tick:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
         .lbody{flex:1;min-width:0;}
         .llabel{font-size:14px;line-height:1.3;color:var(--ivory);}
@@ -1259,21 +1299,22 @@ export default function Calibre() {
         .laction:hover{color:var(--brass);}
         .laction.del:hover{color:var(--crimson);}
         .composer{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
-        .inp{background:rgba(2,18,70,0.65);border:1px solid var(--steel);color:var(--ivory);
+        .inp{background:var(--surface-2);border:1px solid var(--steel);color:var(--ivory);
           padding:10px 13px;border-radius:8px;font-size:13px;font-family:inherit;}
         .inp::placeholder{color:var(--slate);}
         .inp:focus{outline:none;border-color:var(--brass);}
         .inp:focus-visible{outline:2px solid var(--brass);outline-offset:1px;}
         select.inp{cursor:pointer;}
-        select.inp option{background:#021242;color:var(--ivory);}
-        input[type="date"].inp,input[type="time"].inp{color-scheme:dark;}
-        .addbtn{background:var(--brass);border:none;color:#020d2e;padding:0 20px;border-radius:8px;
+        select.inp option{background:var(--opt-bg);color:var(--ivory);}
+        .t-nuit input[type="date"].inp,.t-nuit input[type="time"].inp{color-scheme:dark;}
+        .t-ciel input[type="date"].inp,.t-ciel input[type="time"].inp{color-scheme:light;}
+        .addbtn{background:var(--brass);border:none;color:var(--on-accent);padding:0 20px;border-radius:8px;
           font-weight:600;cursor:pointer;font-family:inherit;min-height:38px;}
         .addbtn:active{background:var(--brass-lo);}
 
         /* habits */
         .comps{display:flex;gap:18px;flex-wrap:wrap;}
-        .comp{width:158px;background:rgba(2,12,50,0.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+        .comp{width:158px;background:var(--surface);box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
           border:1px solid var(--steel);border-radius:13px;
           padding:16px 14px;display:flex;flex-direction:column;gap:9px;position:relative;}
         .comp.on{border-color:var(--jade);}
@@ -1284,9 +1325,9 @@ export default function Calibre() {
         .dots{display:flex;gap:4px;margin-top:4px;}
         .dot{width:13px;height:13px;border-radius:50%;border:1px solid var(--steel);}
         .dot.f{background:var(--jade);border-color:var(--jade);}
-        .comp-btn{margin-top:4px;background:rgba(86,225,232,0.07);border:1px solid var(--steel);color:var(--case);
+        .comp-btn{margin-top:4px;background:var(--tint-a);border:1px solid var(--steel);color:var(--case);
           padding:7px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;}
-        .comp-btn.on{background:var(--jade);border-color:var(--jade);color:#020d2e;font-weight:600;}
+        .comp-btn.on{background:var(--jade);border-color:var(--jade);color:var(--on-accent);font-weight:600;}
         .comp-del{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--slate);
           cursor:pointer;font-size:14px;opacity:.5;font-family:inherit;}
         .comp-del:hover{opacity:1;color:var(--crimson);}
@@ -1300,7 +1341,7 @@ export default function Calibre() {
         /* reserve */
         .gauge-wrap{display:flex;justify-content:center;margin:6px 0 8px;}
         .weekbars{display:flex;gap:10px;width:fit-content;margin:26px auto 0;height:96px;}
-        .wb{width:26px;height:96px;background:rgba(86,225,232,0.12);border-radius:4px;display:flex;
+        .wb{width:26px;height:96px;background:var(--tint-b);border-radius:4px;display:flex;
           align-items:flex-end;position:relative;}
         .wbf{width:100%;background:var(--brass);border-radius:4px;}
         .wbl{position:absolute;bottom:-20px;width:100%;text-align:center;font-size:9px;color:var(--slate);}
@@ -1309,11 +1350,11 @@ export default function Calibre() {
 
         /* insights */
         .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:26px;}
-        .card{background:rgba(2,12,50,0.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+        .card{background:var(--surface);box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
           border:1px solid var(--steel);border-radius:11px;padding:16px;}
         .card .cn{font-family:'IBM Plex Mono',monospace;font-size:26px;color:var(--brass);}
         .card .cl{font-size:11px;color:var(--slate);letter-spacing:.05em;margin-top:3px;}
-        .panel{background:rgba(2,12,50,0.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+        .panel{background:var(--surface);box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
           border:1px solid var(--steel);border-radius:11px;padding:20px;margin-bottom:18px;}
         .panel h3{font-family:'Fraunces',serif;font-weight:500;font-size:15px;margin:0 0 14px;color:var(--ivory);}
         .barchart{display:flex;align-items:flex-end;gap:12px;height:120px;}
@@ -1323,7 +1364,7 @@ export default function Calibre() {
         .bcv{font-size:9px;color:var(--slate);font-family:'IBM Plex Mono',monospace;}
         .prow{display:flex;align-items:center;gap:12px;margin-bottom:9px;}
         .plbl{width:76px;font-size:12px;color:var(--ivory);flex-shrink:0;}
-        .ptrack{flex:1;height:9px;background:rgba(86,225,232,0.12);border-radius:5px;overflow:hidden;}
+        .ptrack{flex:1;height:9px;background:var(--tint-b);border-radius:5px;overflow:hidden;}
         .pfill{height:100%;background:var(--brass);border-radius:5px;}
         .pval{width:56px;text-align:right;font-size:11px;color:var(--slate);font-family:'IBM Plex Mono',monospace;flex-shrink:0;}
 
@@ -1334,15 +1375,15 @@ export default function Calibre() {
         .setsub{font-size:11px;color:var(--slate);margin-top:2px;}
         .stepper{display:flex;align-items:center;gap:10px;}
         .stepbtn{width:30px;height:30px;border-radius:7px;border:1px solid var(--steel);
-          background:rgba(86,225,232,0.07);color:var(--ivory);cursor:pointer;font-size:16px;font-family:inherit;}
-        .stepbtn:hover{border-color:var(--brass);background:rgba(86,225,232,0.14);}
+          background:var(--tint-a);color:var(--ivory);cursor:pointer;font-size:16px;font-family:inherit;}
+        .stepbtn:hover{border-color:var(--brass);background:var(--tint-b);}
         .stepval{font-family:'IBM Plex Mono',monospace;font-size:16px;width:34px;text-align:center;color:var(--brass);}
-        .toggle{width:46px;height:26px;border-radius:13px;background:rgba(86,225,232,0.2);position:relative;cursor:pointer;border:none;}
+        .toggle{width:46px;height:26px;border-radius:13px;background:var(--tint-c);position:relative;cursor:pointer;border:none;}
         .toggle.on{background:var(--brass);}
         .toggle::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
           background:var(--ivory);transition:.2s;}
         .toggle.on::after{left:23px;}
-        .notes{width:100%;min-height:110px;background:rgba(2,18,70,0.65);border:1px solid var(--steel);
+        .notes{width:100%;min-height:110px;background:var(--surface-2);border:1px solid var(--steel);
           color:var(--ivory);border-radius:10px;padding:14px;font-family:inherit;font-size:13px;resize:vertical;line-height:1.6;}
         .notes::placeholder{color:var(--slate);}
         .notes:focus{outline:none;border-color:var(--brass);}
@@ -1359,7 +1400,7 @@ export default function Calibre() {
         .phase-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
         .phase-chip{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:.14em;
           padding:3px 9px;border-radius:10px;border:1px solid var(--steel);color:var(--slate);}
-        .phase-chip.current{border-color:var(--brass);color:var(--brass);background:rgba(86,225,232,0.1);}
+        .phase-chip.current{border-color:var(--brass);color:var(--brass);background:var(--tint-b);}
         .phase-chip.done{border-color:var(--jade);color:var(--jade);}
         .week{border-left:2px solid var(--steel);padding-left:14px;margin-top:18px;}
         .week.now{border-left-color:var(--brass);}
@@ -1368,7 +1409,7 @@ export default function Calibre() {
         /* today */
         .today-grid{display:grid;grid-template-columns:minmax(340px,1.15fr) minmax(0,1fr);gap:32px;align-items:start;}
         .today-side .panel{margin-bottom:14px;}
-        .drow{display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid rgba(86,225,232,0.07);}
+        .drow{display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--row-line);}
         .drow:last-child{border-bottom:none;}
 
         /* shared bits */
@@ -1378,9 +1419,9 @@ export default function Calibre() {
         .swatch{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;}
         .swatch.on{border-color:var(--ivory);}
         .kbd{font-family:'IBM Plex Mono',monospace;font-size:11px;border:1px solid var(--steel);
-          border-radius:4px;padding:1px 7px;color:var(--ivory);background:rgba(86,225,232,0.07);}
+          border-radius:4px;padding:1px 7px;color:var(--ivory);background:var(--tint-a);}
         .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:60;
-          background:rgba(2,14,56,0.94);border:1px solid var(--steel);color:var(--ivory);
+          background:var(--toast-bg);border:1px solid var(--steel);color:var(--ivory);
           padding:12px 18px;border-radius:11px;display:flex;gap:16px;align-items:center;font-size:13px;
           backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 10px 34px rgba(0,0,0,0.45);}
         .toast button{background:none;border:none;color:var(--brass);cursor:pointer;
@@ -1440,7 +1481,7 @@ export default function Calibre() {
                 </div>
               </div>
               <div className="today-side">
-                <div className="panel" style={{ borderColor: "rgba(86,225,232,0.3)" }}>
+                <div className="panel" style={{ borderColor: "var(--steel-strong)" }}>
                   <h3>Programme · {currentWeek ? currentWeek.title : currentPhase.title.split("—")[0].trim()}</h3>
                   {nextProgramItem ? (
                     <div className="drow">
@@ -1588,7 +1629,7 @@ export default function Calibre() {
               const done = phaseAllItems(p).filter((it) => data.programDone[it.id]).length;
               const totalItems = phaseAllItems(p).length;
               return (
-                <div className="panel" key={p.id} style={{ opacity: st === "done" ? 0.65 : 1, borderColor: st === "current" ? "rgba(86,225,232,0.45)" : undefined }}>
+                <div className="panel" key={p.id} style={{ opacity: st === "done" ? 0.65 : 1, borderColor: st === "current" ? "var(--steel-strong)" : undefined }}>
                   <div className="phase-head">
                     <h3 style={{ margin: 0 }}>{p.title}</h3>
                     <span className={`phase-chip ${st}`}>{st === "done" ? "FAIT" : st === "current" ? "EN COURS" : "À VENIR"}</span>
@@ -1696,7 +1737,7 @@ export default function Calibre() {
                     <div className="lbody">
                       <div className={`llabel ${tk.done ? "done" : ""}`}>{tk.label}</div>
                       <div className="lmeta">
-                        <span className="badge" style={{ background: PRIORITY[tk.priority].color + "22", color: PRIORITY[tk.priority].color }}>{PRIORITY[tk.priority].label}</span>
+                        <span className="badge" style={{ background: `color-mix(in srgb, ${PRIORITY[tk.priority].color} 14%, transparent)`, color: PRIORITY[tk.priority].color }}>{PRIORITY[tk.priority].label}</span>
                         <span className="proj"><span className="pdot" style={{ background: projColor(tk.project) }} />{tk.project}</span>
                         {tk.due && <span className={`duetag ${overdue ? "over" : ""}`}>{overdue ? "overdue · " : "due "}{fmtDue(tk.due)}</span>}
                         {(tk.est || sessCount[tk.id]) && <span className="esttag">◉ {sessCount[tk.id] || 0}{tk.est ? `/${tk.est}` : ""}</span>}
@@ -1972,6 +2013,14 @@ export default function Calibre() {
                 </div>
                 <button className={`toggle ${S.reminders ? "on" : ""}`} onClick={toggleReminders}
                   role="switch" aria-checked={S.reminders} aria-label="Reminders" />
+              </div>
+              <div className="setrow">
+                <div>
+                  <div className="setlbl">Thème clair « Ciel »</div>
+                  <div className="setsub">Fond bleu ciel, panneaux clairs — plus lisible en plein jour. Le thème Nuit reste le défaut.</div>
+                </div>
+                <button className={`toggle ${S.theme === "ciel" ? "on" : ""}`} onClick={() => setS({ theme: S.theme === "ciel" ? "nuit" : "ciel" })}
+                  role="switch" aria-checked={S.theme === "ciel"} aria-label="Thème clair Ciel" />
               </div>
             </div>
 

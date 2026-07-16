@@ -7,8 +7,11 @@ import Calibre from './Calibre'
 const Background = lazy(() => import('./Background'))
 
 function StaticBackdrop() {
+  /* Dark gradient inline as the pre-style default; the Ciel theme
+     overrides it from Calibre's stylesheet (see .cal-backdrop rules). */
   return (
     <div
+      className="cal-backdrop"
       style={{
         position: 'fixed',
         inset: 0,

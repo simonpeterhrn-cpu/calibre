@@ -1,8 +1,10 @@
 import { ShaderGradientCanvas, ShaderGradient } from '@shadergradient/react'
 
 export default function Background() {
+  /* .cal-gradient lets the Ciel (light) theme hide the WebGL gradient
+     and its veil entirely — the static light backdrop takes over. */
   return (
-    <>
+    <div className="cal-gradient">
       <ShaderGradientCanvas
         style={{
           position: 'fixed',
@@ -28,6 +30,6 @@ export default function Background() {
           pointerEvents: 'none',
         }}
       />
-    </>
+    </div>
   )
 }
