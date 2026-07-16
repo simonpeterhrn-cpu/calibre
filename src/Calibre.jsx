@@ -401,12 +401,16 @@ const NAV = [
    data.programDone and syncs like everything else. */
 const ECRITS_2028 = "2028-04-17"; // ≈ start of the écrits (X / Centrale window)
 const DRIVE_URL = "https://drive.google.com/drive/folders/1iKNEdPotIdQS13Adu0zUHkFUPV9JWkYX?usp=drive_link";
+const POLY_LLG_URL = "https://miqmacs.fr/docLLG.pdf";      // « Mathématiques : du lycée aux CPGE » (LLG & Henri-IV)
+const POLY_LLG_CORR_URL = "https://miqmacs.fr/docLLGc.pdf"; // correction du poly, même plan
+const QCM_URL = "https://qcm.miqmacs.fr";                   // modules QCM d'auto-évaluation
 const PROGRAM = [
   {
     id: "p0", title: "Été 2026 — la rampe de lancement", period: ["2026-07-01", "2026-08-31"],
     focus: "Arriver le 1er septembre avec les automatismes déjà en place. 3–4 h de maths par jour, régulières, plutôt que des journées héroïques.",
     items: [
       { id: "p0-llg", label: "Terminer le poly de Louis-le-Grand (transition lycée → MPSI), en rédigeant chaque exercice" },
+      { id: "p0-qcm", label: "Valider chaque partie du poly avec le module QCM correspondant — corrigé consulté après coup seulement" },
       { id: "p0-auto", label: "Automatismes parfaits : dérivées, primitives usuelles, trigonométrie, inégalités classiques — sans hésiter" },
       { id: "p0-book", label: "Ellipses MPSI : logique & ensembles, calculs algébriques, nombres complexes (cours résumé + exos-minutes)" },
       { id: "p0-drive", label: "Organiser le Drive : un dossier par chapitre (polys, DS, fiches), pour tout retrouver en 10 secondes" },
@@ -1480,8 +1484,18 @@ export default function Calibre() {
               </div>
               <div className="drow">
                 <div className="lbody">
-                  <div className="llabel" style={{ fontSize: 13 }}>Poly de Louis-le-Grand</div>
-                  <div className="setsub">Le poly de transition lycée → MPSI. C'est le travail de cet été — chaque exercice rédigé au propre.</div>
+                  <div className="llabel" style={{ fontSize: 13 }}>
+                    <a href={POLY_LLG_URL} target="_blank" rel="noreferrer" style={{ color: "var(--brass)" }}>Poly de Louis-le-Grand ↗</a>
+                    {" · "}
+                    <a href={POLY_LLG_CORR_URL} target="_blank" rel="noreferrer" style={{ color: "var(--slate)" }}>corrigé ↗</a>
+                  </div>
+                  <div className="setsub">« Mathématiques : du lycée aux CPGE » (LLG & Henri-IV) — le travail de cet été, chaque exercice rédigé au propre. Le corrigé se consulte après avoir cherché, jamais avant.</div>
+                </div>
+              </div>
+              <div className="drow">
+                <div className="lbody">
+                  <div className="llabel" style={{ fontSize: 13 }}><a href={QCM_URL} target="_blank" rel="noreferrer" style={{ color: "var(--brass)" }}>QCM d'auto-évaluation ↗</a></div>
+                  <div className="setsub">Les modules QCM du prof — un module en fin de chapitre pour vérifier que le cours est vraiment su.</div>
                 </div>
               </div>
               <button className="quiet" onClick={adoptRhythm}>Adopter le rythme prépa (projets + habitudes)</button>
