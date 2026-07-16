@@ -414,7 +414,69 @@ const PROGRAM = [
       { id: "p0-auto", label: "Automatismes parfaits : dérivées, primitives usuelles, trigonométrie, inégalités classiques — sans hésiter" },
       { id: "p0-book", label: "Ellipses MPSI : logique & ensembles, calculs algébriques, nombres complexes (cours résumé + exos-minutes)" },
       { id: "p0-drive", label: "Organiser le Drive : un dossier par chapitre (polys, DS, fiches), pour tout retrouver en 10 secondes" },
+      { id: "p0-fr", label: "Lire activement les 3 œuvres du programme de français-philo — carnet de citations tenu au fil des pages" },
+      { id: "p0-phys", label: "Physique : terminale refichée (1 page par thème depuis tes cours) + premiers chapitres MPSI entrevus" },
       { id: "p0-sleep", label: "Caler le sommeil sur le rythme prépa (23 h – 7 h) deux semaines avant la rentrée" },
+    ],
+    weeks: [
+      {
+        id: "p0w1", title: "S1 — Mise en route", period: ["2026-07-13", "2026-07-19"],
+        items: [
+          { id: "p0w1-m", label: "Maths : poly LLG — logique & raisonnements, rédigé au propre + module QCM" },
+          { id: "p0w1-p", label: "Physique : refiches mécanique de terminale (cinématique, lois de Newton) depuis tes cours" },
+          { id: "p0w1-f", label: "Français : ouvrir l'œuvre 1 — lecture crayon en main, carnet de citations démarré" },
+          { id: "p0w1-c", label: "Cadre : « Adopter le rythme prépa » dans l'app, sessions de 25 min sur le projet Maths" },
+        ],
+      },
+      {
+        id: "p0w2", title: "S2 — Le calcul, nerf de la guerre", period: ["2026-07-20", "2026-07-26"],
+        items: [
+          { id: "p0w2-m", label: "Maths : calculs algébriques & inégalités (sommes, produits, récurrences) + QCM" },
+          { id: "p0w2-p", label: "Physique : mouvement dans un champ (gravitation, champ électrique) — 1 exo type bac par jour" },
+          { id: "p0w2-f", label: "Français : œuvre 1 jusqu'à la moitié — fiche personnages / thèmes en parallèle" },
+        ],
+      },
+      {
+        id: "p0w3", title: "S3 — Trigonométrie & ondes", period: ["2026-07-27", "2026-08-02"],
+        items: [
+          { id: "p0w3-m", label: "Maths : trigonométrie — formules par cœur, équations trigonométriques + QCM" },
+          { id: "p0w3-p", label: "Physique : ondes (interférences, diffraction, Doppler) — fiches + annales ciblées du Drive" },
+          { id: "p0w3-f", label: "Français : terminer l'œuvre 1 — fiche de synthèse, 10 citations sues" },
+        ],
+      },
+      {
+        id: "p0w4", title: "S4 — Dérivation & circuits", period: ["2026-08-03", "2026-08-09"],
+        items: [
+          { id: "p0w4-m", label: "Maths : dérivation & étude de fonctions, inégalités par l'analyse + QCM" },
+          { id: "p0w4-p", label: "Physique : électricité (circuits, RC) — 2 sujets de bac en temps limité" },
+          { id: "p0w4-f", label: "Français : œuvre 2, première moitié — carnet de citations" },
+        ],
+      },
+      {
+        id: "p0w5", title: "S5 — Primitives & premiers pas MPSI", period: ["2026-08-10", "2026-08-16"],
+        items: [
+          { id: "p0w5-m", label: "Maths : primitives & calcul intégral + QCM" },
+          { id: "p0w5-p", label: "Physique MPSI : l'oscillateur harmonique en découverte (cours du Drive)" },
+          { id: "p0w5-f", label: "Français : terminer l'œuvre 2 — fiche de synthèse" },
+        ],
+      },
+      {
+        id: "p0w6", title: "S6 — Suites & complexes", period: ["2026-08-17", "2026-08-23"],
+        items: [
+          { id: "p0w6-m", label: "Maths : suites + nombres complexes (module, argument, forme exponentielle) + QCM" },
+          { id: "p0w6-p", label: "Physique MPSI : lois des circuits (Kirchhoff, dipôles) + optique géométrique en découverte" },
+          { id: "p0w6-f", label: "Français : œuvre 3, première moitié" },
+        ],
+      },
+      {
+        id: "p0w7", title: "S7 — Rentrée en tête", period: ["2026-08-24", "2026-08-31"],
+        items: [
+          { id: "p0w7-m", label: "Maths : reprendre tous les exercices ratés du poly ; refaire les modules QCM" },
+          { id: "p0w7-p", label: "Physique : relire les fiches terminale (1 page/thème) + les débuts MPSI" },
+          { id: "p0w7-f", label: "Français : terminer l'œuvre 3 — relier les 3 œuvres au thème de l'année (plan d'une dissertation)" },
+          { id: "p0w7-r", label: "Sommeil calé 23 h – 7 h, affaires prêtes — et deux vrais jours de repos avant le 1er septembre" },
+        ],
+      },
     ],
   },
   {
@@ -1098,12 +1160,17 @@ export default function Calibre() {
   const todayLog = data.sleepLog[t] || null;
   const bedDelta = todayLog?.bed ? timeDeltaMin(todayLog.bed, S.targetBed) : null;
 
-  /* programme: which phase are we in, what's the next unchecked step */
+  /* programme: which phase/week are we in, what's the next unchecked step */
   const phaseStatus = (p) => (t > p.period[1] ? "done" : t >= p.period[0] ? "current" : "upcoming");
+  const phaseAllItems = (p) => [...p.items, ...(p.weeks ? p.weeks.flatMap((w) => w.items) : [])];
   const currentPhase = PROGRAM.find((p) => phaseStatus(p) === "current")
     || PROGRAM.find((p) => phaseStatus(p) === "upcoming")
     || PROGRAM[PROGRAM.length - 1];
-  const nextProgramItem = currentPhase.items.find((it) => !data.programDone[it.id]) || null;
+  const currentWeek = currentPhase.weeks?.find((w) => t >= w.period[0] && t <= w.period[1]) || null;
+  const nextProgramItem = currentWeek?.items.find((it) => !data.programDone[it.id])
+    || currentPhase.items.find((it) => !data.programDone[it.id])
+    || phaseAllItems(currentPhase).find((it) => !data.programDone[it.id])
+    || null;
   const daysToEcrits = Math.max(0, Math.ceil((new Date(ECRITS_2028 + "T09:00:00") - Date.now()) / DAY));
 
   const SYNC = {
@@ -1294,6 +1361,9 @@ export default function Calibre() {
           padding:3px 9px;border-radius:10px;border:1px solid var(--steel);color:var(--slate);}
         .phase-chip.current{border-color:var(--brass);color:var(--brass);background:rgba(86,225,232,0.1);}
         .phase-chip.done{border-color:var(--jade);color:var(--jade);}
+        .week{border-left:2px solid var(--steel);padding-left:14px;margin-top:18px;}
+        .week.now{border-left-color:var(--brass);}
+        .week-title{font-size:13px;font-weight:600;color:var(--ivory);}
 
         /* today */
         .today-grid{display:grid;grid-template-columns:minmax(340px,1.15fr) minmax(0,1fr);gap:32px;align-items:start;}
@@ -1371,7 +1441,7 @@ export default function Calibre() {
               </div>
               <div className="today-side">
                 <div className="panel" style={{ borderColor: "rgba(86,225,232,0.3)" }}>
-                  <h3>Programme · {currentPhase.title.split("—")[0].trim()}</h3>
+                  <h3>Programme · {currentWeek ? currentWeek.title : currentPhase.title.split("—")[0].trim()}</h3>
                   {nextProgramItem ? (
                     <div className="drow">
                       <button className="tick" onClick={() => toggleProgramItem(nextProgramItem.id)}
@@ -1459,7 +1529,7 @@ export default function Calibre() {
             <div className="cards" style={{ maxWidth: 720 }}>
               <div className="card"><div className="cn">{daysToEcrits}</div><div className="cl">JOURS AVANT LES ÉCRITS</div></div>
               <div className="card">
-                <div className="cn">{PROGRAM.reduce((a, p) => a + p.items.filter((it) => data.programDone[it.id]).length, 0)}<span style={{ fontSize: 15, color: "var(--slate)" }}> / {PROGRAM.reduce((a, p) => a + p.items.length, 0)}</span></div>
+                <div className="cn">{PROGRAM.reduce((a, p) => a + phaseAllItems(p).filter((it) => data.programDone[it.id]).length, 0)}<span style={{ fontSize: 15, color: "var(--slate)" }}> / {PROGRAM.reduce((a, p) => a + phaseAllItems(p).length, 0)}</span></div>
                 <div className="cl">JALONS FRANCHIS</div>
               </div>
               <div className="card">
@@ -1498,18 +1568,31 @@ export default function Calibre() {
                   <div className="setsub">Les modules QCM du prof — un module en fin de chapitre pour vérifier que le cours est vraiment su.</div>
                 </div>
               </div>
+              <div className="drow">
+                <div className="lbody">
+                  <div className="llabel" style={{ fontSize: 13 }}>Les 3 œuvres du programme de français-philo</div>
+                  <div className="setsub">Lecture active : crayon en main, carnet de citations classées par thème, fiche de synthèse par œuvre. Une œuvre ≈ 2 semaines.</div>
+                </div>
+              </div>
+              <div className="drow">
+                <div className="lbody">
+                  <div className="llabel" style={{ fontSize: 13 }}>Physique — cours de terminale & annales</div>
+                  <div className="setsub">Tes cours de l'année + sujets de bac (dans le Drive) : refichage par thème, puis exos en temps limité. Les débuts MPSI (oscillateur, circuits, optique) en découverte fin août.</div>
+                </div>
+              </div>
               <button className="quiet" onClick={adoptRhythm}>Adopter le rythme prépa (projets + habitudes)</button>
             </div>
 
             {PROGRAM.map((p) => {
               const st = phaseStatus(p);
-              const done = p.items.filter((it) => data.programDone[it.id]).length;
+              const done = phaseAllItems(p).filter((it) => data.programDone[it.id]).length;
+              const totalItems = phaseAllItems(p).length;
               return (
                 <div className="panel" key={p.id} style={{ opacity: st === "done" ? 0.65 : 1, borderColor: st === "current" ? "rgba(86,225,232,0.45)" : undefined }}>
                   <div className="phase-head">
                     <h3 style={{ margin: 0 }}>{p.title}</h3>
                     <span className={`phase-chip ${st}`}>{st === "done" ? "FAIT" : st === "current" ? "EN COURS" : "À VENIR"}</span>
-                    <span className="esttag" style={{ marginLeft: "auto" }}>{done}/{p.items.length}</span>
+                    <span className="esttag" style={{ marginLeft: "auto" }}>{done}/{totalItems}</span>
                   </div>
                   <div className="setsub" style={{ margin: "6px 0 12px" }}>
                     {p.period.map((ds) => {
@@ -1526,6 +1609,34 @@ export default function Calibre() {
                           {isDone ? "✓" : ""}
                         </button>
                         <div className={`llabel ${isDone ? "done" : ""}`} style={{ fontSize: 13, flex: 1 }}>{it.label}</div>
+                      </div>
+                    );
+                  })}
+                  {p.weeks?.map((w) => {
+                    const wDone = w.items.filter((it) => data.programDone[it.id]).length;
+                    const isNow = t >= w.period[0] && t <= w.period[1];
+                    const isPast = t > w.period[1];
+                    return (
+                      <div className={`week ${isNow ? "now" : ""}`} key={w.id}
+                        style={{ opacity: isPast && wDone === w.items.length ? 0.6 : 1 }}>
+                        <div className="phase-head" style={{ marginBottom: 2 }}>
+                          <span className="week-title">{w.title}</span>
+                          <span className="esttag">{fmtDue(w.period[0])} → {fmtDue(w.period[1])}</span>
+                          {isNow && <span className="phase-chip current">CETTE SEMAINE</span>}
+                          <span className="esttag" style={{ marginLeft: "auto" }}>{wDone}/{w.items.length}</span>
+                        </div>
+                        {w.items.map((it) => {
+                          const isDone = !!data.programDone[it.id];
+                          return (
+                            <div className="drow" key={it.id}>
+                              <button className={`tick ${isDone ? "on" : ""}`} onClick={() => toggleProgramItem(it.id)}
+                                role="checkbox" aria-checked={isDone} aria-label={`Marquer « ${it.label} »`}>
+                                {isDone ? "✓" : ""}
+                              </button>
+                              <div className={`llabel ${isDone ? "done" : ""}`} style={{ fontSize: 13, flex: 1 }}>{it.label}</div>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
