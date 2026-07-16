@@ -410,69 +410,69 @@ const PROGRAM = [
     focus: "Arriver le 1er septembre avec les automatismes déjà en place. 3–4 h de maths par jour, régulières, plutôt que des journées héroïques.",
     items: [
       { id: "p0-llg", label: "Terminer le poly de Louis-le-Grand (transition lycée → MPSI), en rédigeant chaque exercice" },
-      { id: "p0-qcm", label: "Valider chaque partie du poly avec le module QCM correspondant — corrigé consulté après coup seulement" },
+      { id: "p0-qcm", label: "Boucler les modules QCM (niveau terminale) en deux semaines — zéro trou en sortant du lycée" },
       { id: "p0-auto", label: "Automatismes parfaits : dérivées, primitives usuelles, trigonométrie, inégalités classiques — sans hésiter" },
       { id: "p0-book", label: "Ellipses MPSI : logique & ensembles, calculs algébriques, nombres complexes (cours résumé + exos-minutes)" },
       { id: "p0-drive", label: "Organiser le Drive : un dossier par chapitre (polys, DS, fiches), pour tout retrouver en 10 secondes" },
       { id: "p0-fr", label: "Lire activement les 3 œuvres du programme de français-philo — carnet de citations tenu au fil des pages" },
-      { id: "p0-phys", label: "Physique : terminale refichée (1 page par thème depuis tes cours) + premiers chapitres MPSI entrevus" },
+      { id: "p0-phys", label: "Physique : terminale refichée en deux semaines, puis programme MPSI entamé (oscillateur, circuits, optique, signaux)" },
       { id: "p0-sleep", label: "Caler le sommeil sur le rythme prépa (23 h – 7 h) deux semaines avant la rentrée" },
     ],
     weeks: [
       {
-        id: "p0w1", title: "S1 — Mise en route", period: ["2026-07-13", "2026-07-19"],
+        id: "p0w1", title: "S1 — État des lieux terminale", period: ["2026-07-13", "2026-07-19"],
         items: [
-          { id: "p0w1-m", label: "Maths : poly LLG — logique & raisonnements, rédigé au propre + module QCM" },
-          { id: "p0w1-p", label: "Physique : refiches mécanique de terminale (cinématique, lois de Newton) depuis tes cours" },
+          { id: "p0w1-m", label: "Maths : modules QCM (niveau terminale) — état des lieux, chaque trou noté ; automatismes quotidiens (dérivées, primitives, trigo)" },
+          { id: "p0w1-p", label: "Physique : refiches mécanique de terminale (cinématique, Newton, mouvement dans un champ) depuis tes cours" },
           { id: "p0w1-f", label: "Français : ouvrir l'œuvre 1 — lecture crayon en main, carnet de citations démarré" },
           { id: "p0w1-c", label: "Cadre : « Adopter le rythme prépa » dans l'app, sessions de 25 min sur le projet Maths" },
         ],
       },
       {
-        id: "p0w2", title: "S2 — Le calcul, nerf de la guerre", period: ["2026-07-20", "2026-07-26"],
+        id: "p0w2", title: "S2 — Boucler la terminale", period: ["2026-07-20", "2026-07-26"],
         items: [
-          { id: "p0w2-m", label: "Maths : calculs algébriques & inégalités (sommes, produits, récurrences) + QCM" },
-          { id: "p0w2-p", label: "Physique : mouvement dans un champ (gravitation, champ électrique) — 1 exo type bac par jour" },
+          { id: "p0w2-m", label: "Maths : boucler tous les modules QCM, combler chaque trou repéré ; poly LLG — logique & calcul algébrique" },
+          { id: "p0w2-p", label: "Physique : ondes & électricité de terminale — fiches + 1 sujet de bac en temps limité (annales du Drive)" },
           { id: "p0w2-f", label: "Français : œuvre 1 jusqu'à la moitié — fiche personnages / thèmes en parallèle" },
         ],
       },
       {
-        id: "p0w3", title: "S3 — Trigonométrie & ondes", period: ["2026-07-27", "2026-08-02"],
+        id: "p0w3", title: "S3 — Entrée dans le programme MPSI", period: ["2026-07-27", "2026-08-02"],
         items: [
-          { id: "p0w3-m", label: "Maths : trigonométrie — formules par cœur, équations trigonométriques + QCM" },
-          { id: "p0w3-p", label: "Physique : ondes (interférences, diffraction, Doppler) — fiches + annales ciblées du Drive" },
+          { id: "p0w3-m", label: "Maths MPSI : Ellipses ch. 1 — logique, ensembles, applications (cours résumé + exos) ; poly LLG — trigonométrie" },
+          { id: "p0w3-p", label: "Physique MPSI : l'oscillateur harmonique (cours du Drive) — premier chapitre du programme" },
           { id: "p0w3-f", label: "Français : terminer l'œuvre 1 — fiche de synthèse, 10 citations sues" },
         ],
       },
       {
-        id: "p0w4", title: "S4 — Dérivation & circuits", period: ["2026-08-03", "2026-08-09"],
+        id: "p0w4", title: "S4 — Calculs & circuits", period: ["2026-08-03", "2026-08-09"],
         items: [
-          { id: "p0w4-m", label: "Maths : dérivation & étude de fonctions, inégalités par l'analyse + QCM" },
-          { id: "p0w4-p", label: "Physique : électricité (circuits, RC) — 2 sujets de bac en temps limité" },
+          { id: "p0w4-m", label: "Maths MPSI : calculs algébriques & inégalités (Ellipses) ; poly LLG — dérivation & étude de fonctions" },
+          { id: "p0w4-p", label: "Physique MPSI : circuits électriques (lois de Kirchhoff, dipôles, RC revisité niveau sup)" },
           { id: "p0w4-f", label: "Français : œuvre 2, première moitié — carnet de citations" },
         ],
       },
       {
-        id: "p0w5", title: "S5 — Primitives & premiers pas MPSI", period: ["2026-08-10", "2026-08-16"],
+        id: "p0w5", title: "S5 — Complexes & optique", period: ["2026-08-10", "2026-08-16"],
         items: [
-          { id: "p0w5-m", label: "Maths : primitives & calcul intégral + QCM" },
-          { id: "p0w5-p", label: "Physique MPSI : l'oscillateur harmonique en découverte (cours du Drive)" },
+          { id: "p0w5-m", label: "Maths MPSI : nombres complexes (Ellipses — Vrai/Faux + exos) ; poly LLG — primitives & calcul intégral" },
+          { id: "p0w5-p", label: "Physique MPSI : optique géométrique (lois de Descartes, lentilles minces)" },
           { id: "p0w5-f", label: "Français : terminer l'œuvre 2 — fiche de synthèse" },
         ],
       },
       {
-        id: "p0w6", title: "S6 — Suites & complexes", period: ["2026-08-17", "2026-08-23"],
+        id: "p0w6", title: "S6 — Fonctions usuelles & signaux", period: ["2026-08-17", "2026-08-23"],
         items: [
-          { id: "p0w6-m", label: "Maths : suites + nombres complexes (module, argument, forme exponentielle) + QCM" },
-          { id: "p0w6-p", label: "Physique MPSI : lois des circuits (Kirchhoff, dipôles) + optique géométrique en découverte" },
+          { id: "p0w6-m", label: "Maths MPSI : fonctions usuelles (ln, exp, trigo réciproques) ; poly LLG — suites" },
+          { id: "p0w6-p", label: "Physique MPSI : propagation des signaux & ondes — exos d'application" },
           { id: "p0w6-f", label: "Français : œuvre 3, première moitié" },
         ],
       },
       {
         id: "p0w7", title: "S7 — Rentrée en tête", period: ["2026-08-24", "2026-08-31"],
         items: [
-          { id: "p0w7-m", label: "Maths : reprendre tous les exercices ratés du poly ; refaire les modules QCM" },
-          { id: "p0w7-p", label: "Physique : relire les fiches terminale (1 page/thème) + les débuts MPSI" },
+          { id: "p0w7-m", label: "Maths : reprendre tout ce qui a résisté (poly LLG + Ellipses) — chaque exo raté est refait" },
+          { id: "p0w7-p", label: "Physique : relire toutes les fiches — terminale + chapitres MPSI vus (oscillateur, circuits, optique, signaux)" },
           { id: "p0w7-f", label: "Français : terminer l'œuvre 3 — relier les 3 œuvres au thème de l'année (plan d'une dissertation)" },
           { id: "p0w7-r", label: "Sommeil calé 23 h – 7 h, affaires prêtes — et deux vrais jours de repos avant le 1er septembre" },
         ],
@@ -1565,7 +1565,7 @@ export default function Calibre() {
               <div className="drow">
                 <div className="lbody">
                   <div className="llabel" style={{ fontSize: 13 }}><a href={QCM_URL} target="_blank" rel="noreferrer" style={{ color: "var(--brass)" }}>QCM d'auto-évaluation ↗</a></div>
-                  <div className="setsub">Les modules QCM du prof — un module en fin de chapitre pour vérifier que le cours est vraiment su.</div>
+                  <div className="setsub">Les modules QCM du prof — niveau terminale : l'état des lieux des deux premières semaines, chaque trou repéré puis comblé.</div>
                 </div>
               </div>
               <div className="drow">
@@ -1577,7 +1577,7 @@ export default function Calibre() {
               <div className="drow">
                 <div className="lbody">
                   <div className="llabel" style={{ fontSize: 13 }}>Physique — cours de terminale & annales</div>
-                  <div className="setsub">Tes cours de l'année + sujets de bac (dans le Drive) : refichage par thème, puis exos en temps limité. Les débuts MPSI (oscillateur, circuits, optique) en découverte fin août.</div>
+                  <div className="setsub">Tes cours de l'année + sujets de bac (dans le Drive) : deux semaines de consolidation, puis le programme MPSI (oscillateur, circuits, optique, signaux) dès la 3ᵉ semaine.</div>
                 </div>
               </div>
               <button className="quiet" onClick={adoptRhythm}>Adopter le rythme prépa (projets + habitudes)</button>
